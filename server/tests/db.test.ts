@@ -11,7 +11,7 @@ describe('StudintyDatabase', () => {
   it('initializes with curated default YouTube radio and starter rooms', () => {
     const radios = db.getRadios();
     expect(radios.length).toBeGreaterThanOrEqual(1);
-    expect(radios.some((r) => r.id === 'radio-yt-halloween' && r.stream_type === 'youtube')).toBe(
+    expect(radios.some((r) => r.id === 'radio-yt-lofigirl' && r.stream_type === 'youtube')).toBe(
       true
     );
 
@@ -30,7 +30,7 @@ describe('StudintyDatabase', () => {
       timer_break_minutes: 0,
       breaks_enabled: 0,
       timer_mode: 'continuous',
-      default_radio_id: 'radio-yt-halloween',
+      default_radio_id: 'radio-yt-lofigirl',
       ambient_sound: 'rain',
       ambient_volume: 0.5,
       radio_volume: 0.8,
@@ -108,8 +108,8 @@ describe('StudintyDatabase', () => {
   it('logs play history and updates duration', () => {
     const startedAt = new Date().toISOString();
     const entry = db.recordPlayHistory({
-      radio_id: 'radio-yt-halloween',
-      radio_name: '24/7 Halloween Ambience — Spooky Lofi',
+      radio_id: 'radio-yt-lofigirl',
+      radio_name: 'lofi hip hop radio 📚 beats to relax/study to',
       room_id: null,
       session_id: null,
       duration_seconds: 0,

@@ -87,10 +87,10 @@ export class StudintyDatabase {
   private seedDefaults() {
     const curatedRadios: Omit<RadioStation, 'created_at'>[] = [
       {
-        id: 'radio-yt-halloween',
-        name: '24/7 Halloween Ambience — Spooky Lofi',
-        description: '24/7 halloween ambience 🎃 spooky lofi to get chills to (Lofi Girl).',
-        url: 'https://music.youtube.com/watch?v=0sfDth4lMLc&si=yaLbbTtZ0JMfjpR3',
+        id: 'radio-yt-lofigirl',
+        name: 'lofi hip hop radio 📚 beats to relax/study to',
+        description: 'lofi hip hop radio 📚 beats to relax/study to (Lofi Girl).',
+        url: 'https://www.youtube.com/watch?v=rFZHOHl-L8A',
         stream_type: 'youtube',
         genre: 'lofi live',
         is_curated: 1,
@@ -124,7 +124,7 @@ export class StudintyDatabase {
     );
 
     // Update rooms to use the default radio station
-    this.db.prepare("UPDATE rooms SET default_radio_id = 'radio-yt-halloween'").run();
+    this.db.prepare("UPDATE rooms SET default_radio_id = 'radio-yt-lofigirl'").run();
 
     const roomCountRow = this.db.prepare('SELECT COUNT(*) as count FROM rooms').get() as { count: number | bigint };
     const roomCount = Number(roomCountRow.count);
@@ -140,7 +140,7 @@ export class StudintyDatabase {
           timer_break_minutes: 10,
           breaks_enabled: 1,
           timer_mode: 'pomodoro',
-          default_radio_id: 'radio-yt-halloween',
+          default_radio_id: 'radio-yt-lofigirl',
           ambient_sound: 'rain',
           ambient_volume: 0.35,
           radio_volume: 0.7,
@@ -154,7 +154,7 @@ export class StudintyDatabase {
           timer_break_minutes: 5,
           breaks_enabled: 1,
           timer_mode: 'pomodoro',
-          default_radio_id: 'radio-yt-halloween',
+          default_radio_id: 'radio-yt-lofigirl',
           ambient_sound: 'fireplace',
           ambient_volume: 0.3,
           radio_volume: 0.7,
@@ -168,7 +168,7 @@ export class StudintyDatabase {
           timer_break_minutes: 0,
           breaks_enabled: 0,
           timer_mode: 'continuous',
-          default_radio_id: 'radio-yt-halloween',
+          default_radio_id: 'radio-yt-lofigirl',
           ambient_sound: 'cafe',
           ambient_volume: 0.35,
           radio_volume: 0.75,
@@ -182,7 +182,7 @@ export class StudintyDatabase {
           timer_break_minutes: 10,
           breaks_enabled: 1,
           timer_mode: 'custom',
-          default_radio_id: 'radio-yt-halloween',
+          default_radio_id: 'radio-yt-lofigirl',
           ambient_sound: 'waves',
           ambient_volume: 0.25,
           radio_volume: 0.7,
@@ -448,27 +448,28 @@ export class StudintyDatabase {
       ORDER BY day DESC
     `).all() as { day: string }[];
 
-    const daysSet = new Set(sessionDays.map((d) => d.day));
-    let streakDays = 0;
+    let activeStreak = 0;
     const checkDate = new Date();
+    const uniqueDays = new Set(sessionDays.map((d) => d.day));
 
-    const todayDayStr = checkDate.toLocaleDateString('en-CA');
-    if (daysSet.has(todayDayStr)) {
-      streakDays += 1;
+    // Check if streak active from today or yesterday
+    const todayFormatted = checkDate.toLocaleDateString('en-CA');
+    if (uniqueDays.has(todayFormatted)) {
+      activeStreak += 1;
       checkDate.setDate(checkDate.getDate() - 1);
     } else {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toLocaleDateString('en-CA');
-      if (daysSet.has(yesterdayStr)) {
+      const yesterdayFormatted = yesterday.toLocaleDateString('en-CA');
+      if (uniqueDays.has(yesterdayFormatted)) {
         checkDate.setDate(checkDate.getDate() - 1);
       }
     }
 
-    while (streakDays > 0) {
-      const prevStr = checkDate.toLocaleDateString('en-CA');
-      if (daysSet.has(prevStr)) {
-        streakDays += 1;
+    while (activeStreak > 0) {
+      const curFormatted = checkDate.toLocaleDateString('en-CA');
+      if (uniqueDays.has(curFormatted)) {
+        activeStreak += 1;
         checkDate.setDate(checkDate.getDate() - 1);
       } else {
         break;
@@ -478,7 +479,7 @@ export class StudintyDatabase {
     return {
       totalFocusSeconds: Number(totalRow.totalFocusSeconds),
       completedSessionsCount: Number(totalRow.completedSessionsCount),
-      activeStreakDays: streakDays,
+      activeStreakDays: activeStreak,
       todayFocusSeconds: Number(todayRow.todayFocusSeconds),
     };
   }
