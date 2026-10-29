@@ -6,12 +6,16 @@ import { createApp } from './app.js';
 const PORT = process.env.PORT || 3001;
 const { app } = createApp();
 
-// Serve client in production if built
+// Serve client in production if built (Express 5 compatible SPA fallback)
 const distPath = path.resolve(process.cwd(), 'dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api')) {
+      res.sendFile(path.join(distPath, 'index.html'));
+      return;
+    }
+    next();
   });
 }
 

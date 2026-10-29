@@ -2,6 +2,8 @@ node_modules/
 dist/
 studinty.db
 studinty.db-journal
+studinty.db-shm
+studinty.db-wal
 .env
 .DS_Store
 *.log

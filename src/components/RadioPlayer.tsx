@@ -1,242 +1,371 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RadioStation } from '../types/index.js';
-import { Play, Pause, Volume2, VolumeX, Radio as RadioIcon, Plus, ExternalLink, Loader2 } from 'lucide-react';
+import { extractYouTubeId, isYouTubeUrl } from '../utils/youtube.js';
+import { youtubeAudio } from '../utils/youtubePlayer.js';
+import { sound } from '../utils/sound.js';
 import { api } from '../services/api.js';
+import { CalmSlider } from './ui.js';
+import { Play, Pause, Volume2, VolumeX, Plus, Trash2, Loader2 } from 'lucide-react';
 
 interface Props {
   stations: RadioStation[];
   currentStationId: string | null;
   onSelectStation: (stationId: string) => void;
   onOpenAddModal: () => void;
+  onDeleteStation?: (stationId: string) => void;
   radioVolume: number;
   onVolumeChange: (volume: number) => void;
   activeRoomId: string | null;
+  onHistoryUpdated?: () => void;
 }
+
+type ActiveEngine = 'none' | 'html-audio' | 'youtube-iframe' | 'youtube-stream' | 'synth-ambient';
 
 export const RadioPlayer: React.FC<Props> = ({
   stations,
   currentStationId,
   onSelectStation,
   onOpenAddModal,
+  onDeleteStation,
   radioVolume,
   onVolumeChange,
   activeRoomId,
+  onHistoryUpdated,
 }) => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [engine, setEngine] = useState<ActiveEngine>('none');
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const currentHistoryIdRef = useRef<string | null>(null);
   const playStartTimeRef = useRef<number | null>(null);
+  const isPlayingRef = useRef<boolean>(false);
+  isPlayingRef.current = isPlaying;
 
   const activeStation = stations.find((s) => s.id === currentStationId) || stations[0];
 
-  // Sync volume with audio element
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = isMuted ? 0 : radioVolume;
-    }
-  }, [radioVolume, isMuted]);
-
-  // Handle station change
-  useEffect(() => {
-    if (!activeStation) return;
-
-    setStreamError(null);
-
-    // If currently playing, stop previous history item and start new
+  const closeActiveHistory = () => {
     if (currentHistoryIdRef.current && playStartTimeRef.current) {
-      const elapsed = Math.round((Date.now() - playStartTimeRef.current) / 1000);
-      api.updatePlayEnd(currentHistoryIdRef.current, elapsed).catch(console.error);
+      const elapsed = Math.max(1, Math.round((Date.now() - playStartTimeRef.current) / 1000));
+      const histId = currentHistoryIdRef.current;
       currentHistoryIdRef.current = null;
       playStartTimeRef.current = null;
+      api
+        .updatePlayEnd(histId, elapsed)
+        .then(() => onHistoryUpdated?.())
+        .catch(console.error);
     }
+  };
 
-    if (audioRef.current) {
-      if (isPlaying) {
-        setIsLoading(true);
-        audioRef.current.src = activeStation.url;
-        audioRef.current
-          .play()
-          .then(() => {
-            setIsLoading(false);
-            recordPlayStart();
-          })
-          .catch((err) => {
-            console.warn('Playback error:', err);
-            setIsPlaying(false);
-            setIsLoading(false);
-            setStreamError('Station stream connecting or currently offline.');
-          });
-      } else {
-        audioRef.current.src = activeStation.url;
-      }
-    }
-  }, [activeStation?.id]);
-
-  const recordPlayStart = async () => {
-    if (!activeStation) return;
+  const openNewHistory = async (station: RadioStation) => {
     try {
-      const startIso = new Date().toISOString();
       playStartTimeRef.current = Date.now();
       const item = await api.recordPlayStart({
-        radio_id: activeStation.id,
-        radio_name: activeStation.name,
+        radio_id: station.id,
+        radio_name: station.name,
         room_id: activeRoomId,
-        started_at: startIso,
+        started_at: new Date().toISOString(),
       });
       currentHistoryIdRef.current = item.id;
+      onHistoryUpdated?.();
     } catch (err) {
       console.warn('Could not record play start:', err);
     }
   };
 
-  const togglePlay = () => {
-    if (!audioRef.current || !activeStation) return;
-
-    if (isPlaying) {
+  const stopAllEngines = () => {
+    if (audioRef.current) {
       audioRef.current.pause();
-      setIsPlaying(false);
-      setIsLoading(false);
+      audioRef.current.removeAttribute('src');
+      audioRef.current.load();
+    }
+    youtubeAudio.pause();
+    if (engine === 'synth-ambient') {
+      sound.stopAmbient();
+    }
+    setEngine('none');
+  };
 
-      if (currentHistoryIdRef.current && playStartTimeRef.current) {
-        const elapsed = Math.round((Date.now() - playStartTimeRef.current) / 1000);
-        api.updatePlayEnd(currentHistoryIdRef.current, elapsed).catch(console.error);
-        currentHistoryIdRef.current = null;
-        playStartTimeRef.current = null;
+  const startStationPlayback = (station: RadioStation) => {
+    setStreamError(null);
+    setIsLoading(true);
+
+    // 1. Built-in synthesized ambient station (e.g. ambient:rain)
+    if (station.stream_type === 'ambient' || station.url.startsWith('ambient:')) {
+      youtubeAudio.pause();
+      if (audioRef.current) audioRef.current.pause();
+      const ambType = station.url.replace('ambient:', '') || 'rain';
+      sound.startAmbient(ambType, isMuted ? 0 : radioVolume);
+      setEngine('synth-ambient');
+      setIsPlaying(true);
+      setIsLoading(false);
+      openNewHistory(station);
+      return;
+    }
+
+    // 2. YouTube video or 24/7 YouTube live stream -> pure audio stream
+    const ytId = extractYouTubeId(station.url);
+    if (ytId || station.stream_type === 'youtube' || isYouTubeUrl(station.url)) {
+      if (audioRef.current) audioRef.current.pause();
+
+      const fallbackToBackendAudioStream = () => {
+        if (!audioRef.current) return;
+        setEngine('youtube-stream');
+        setIsLoading(true);
+        audioRef.current.src = api.getYouTubeAudioStreamUrl(station.url);
+        audioRef.current.volume = isMuted ? 0 : radioVolume;
+        audioRef.current
+          .play()
+          .then(() => {
+            setIsPlaying(true);
+            setIsLoading(false);
+            openNewHistory(station);
+          })
+          .catch(() => {
+            setIsPlaying(false);
+            setIsLoading(false);
+            setStreamError('Unable to stream YouTube audio. Verify the video/live URL is public.');
+          });
+      };
+
+      if (!ytId) {
+        fallbackToBackendAudioStream();
+        return;
       }
-    } else {
-      setIsLoading(true);
-      setStreamError(null);
-      audioRef.current.src = activeStation.url;
-      audioRef.current
-        .play()
-        .then(() => {
+
+      setEngine('youtube-iframe');
+      youtubeAudio.play(ytId, radioVolume, isMuted, {
+        onPlaying: () => {
           setIsPlaying(true);
           setIsLoading(false);
-          recordPlayStart();
-        })
-        .catch((err) => {
-          console.warn('Playback failed:', err);
-          setIsPlaying(false);
-          setIsLoading(false);
-          setStreamError('Could not start stream. Please check stream URL.');
-        });
+          if (!currentHistoryIdRef.current) {
+            openNewHistory(station);
+          }
+        },
+        onBuffering: () => {
+          setIsLoading(true);
+        },
+        onFallbackNeeded: () => {
+          youtubeAudio.stop();
+          fallbackToBackendAudioStream();
+        },
+      });
+      return;
+    }
+
+    // 3. Standard Icecast / MP3 / Direct audio stream
+    youtubeAudio.pause();
+    if (!audioRef.current) return;
+    setEngine('html-audio');
+    audioRef.current.src = station.url;
+    audioRef.current.volume = isMuted ? 0 : radioVolume;
+    audioRef.current
+      .play()
+      .then(() => {
+        setIsPlaying(true);
+        setIsLoading(false);
+        openNewHistory(station);
+      })
+      .catch(() => {
+        setIsPlaying(false);
+        setIsLoading(false);
+        setStreamError('Could not connect to audio stream.');
+      });
+  };
+
+  // Sync volume across whichever audio engine is active
+  useEffect(() => {
+    const effectiveVol = isMuted ? 0 : radioVolume;
+    if (audioRef.current) {
+      audioRef.current.volume = effectiveVol;
+    }
+    youtubeAudio.setVolume(radioVolume, isMuted);
+    if (engine === 'synth-ambient') {
+      sound.setAmbientVolume(effectiveVol);
+    }
+  }, [radioVolume, isMuted, engine]);
+
+  // Switch station smoothly if user selects a different radio
+  useEffect(() => {
+    if (!activeStation) return;
+    setStreamError(null);
+
+    if (isPlayingRef.current) {
+      closeActiveHistory();
+      stopAllEngines();
+      startStationPlayback(activeStation);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStation?.id]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      closeActiveHistory();
+      youtubeAudio.pause();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const togglePlay = () => {
+    if (!activeStation) return;
+
+    if (isPlaying) {
+      setIsPlaying(false);
+      setIsLoading(false);
+      closeActiveHistory();
+      stopAllEngines();
+    } else {
+      startStationPlayback(activeStation);
     }
   };
 
-  const toggleMute = () => {
-    setIsMuted(!isMuted);
-  };
+  const isYouTubeStation =
+    activeStation &&
+    (activeStation.stream_type === 'youtube' || isYouTubeUrl(activeStation.url));
 
   return (
-    <div className="p-4 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-sm">
+    <div className="space-y-3">
       <audio
         ref={audioRef}
         preload="none"
         onError={() => {
-          setIsLoading(false);
-          setIsPlaying(false);
-          setStreamError('Audio stream unavailable or paused.');
+          if (engine === 'html-audio' || engine === 'youtube-stream') {
+            setIsLoading(false);
+            setIsPlaying(false);
+            setStreamError('Audio stream unavailable or offline.');
+          }
         }}
-        onWaiting={() => setIsLoading(true)}
-        onPlaying={() => setIsLoading(false)}
+        onWaiting={() => {
+          if (engine === 'html-audio' || engine === 'youtube-stream') setIsLoading(true);
+        }}
+        onPlaying={() => {
+          if (engine === 'html-audio' || engine === 'youtube-stream') setIsLoading(false);
+        }}
       />
 
-      <div className="flex items-center justify-between mb-3">
+      {/* Top Row: Label + Add Stream */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <RadioIcon className="w-4 h-4 text-[var(--accent-main)]" />
-          <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
-            Focus Radio
+          <span className="text-[11px] font-medium uppercase tracking-widest text-[var(--text-faint)]">
+            Lofi & Audio Stream
           </span>
+          {isYouTubeStation && (
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--ink-wash)] text-[var(--text-muted)]">
+              YT Audio
+            </span>
+          )}
         </div>
+
         <button
+          type="button"
           onClick={onOpenAddModal}
-          className="text-xs text-[var(--text-muted)] hover:text-[var(--accent-main)] flex items-center gap-1 transition-colors"
-          title="Add Custom Radio Link"
+          className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] inline-flex items-center gap-1 transition-colors"
+          title="Add YouTube video, YouTube live stream, or MP3 radio URL"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>Add Stream</span>
+          <span>Add link</span>
         </button>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
-        {/* Station selector */}
-        <div className="w-full sm:w-auto flex-1">
-          <select
-            value={activeStation?.id || ''}
-            onChange={(e) => onSelectStation(e.target.value)}
-            className="w-full text-sm font-medium bg-[var(--bg-card-subtle)] text-[var(--text-main)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[var(--accent-main)] cursor-pointer"
-          >
-            {stations.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.genre})
-              </option>
-            ))}
-          </select>
-          {activeStation && (
-            <p className="text-[11px] text-[var(--text-muted)] mt-1 truncate">
+      {/* Main Player Row: Play button + Blended Station Select + Volume */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={togglePlay}
+          disabled={isLoading && !isPlaying}
+          className="w-9 h-9 shrink-0 rounded-full bg-[var(--ink-wash-strong)] hover:bg-[var(--accent-main)] text-[var(--text-main)] hover:text-[var(--accent-fg)] flex items-center justify-center transition-colors active:scale-95"
+          title={isPlaying ? 'Pause radio' : 'Play radio'}
+          aria-label={isPlaying ? 'Pause radio' : 'Play radio'}
+        >
+          {isLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : isPlaying ? (
+            <Pause className="w-3.5 h-3.5 fill-current" />
+          ) : (
+            <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+          )}
+        </button>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <select
+              value={activeStation?.id || ''}
+              onChange={(e) => onSelectStation(e.target.value)}
+              aria-label="Select radio station"
+              className="w-full text-sm font-medium bg-transparent text-[var(--text-main)] py-1 pr-2 rounded-lg hover:bg-[var(--ink-wash)] focus:bg-[var(--ink-wash)] focus:outline-none cursor-pointer truncate"
+            >
+              {stations.map((s) => (
+                <option
+                  key={s.id}
+                  value={s.id}
+                  className="bg-[var(--bg-elevated)] text-[var(--text-main)]"
+                >
+                  {s.name} · {s.genre}
+                </option>
+              ))}
+            </select>
+
+            {activeStation && activeStation.is_curated === 0 && onDeleteStation && (
+              <button
+                type="button"
+                onClick={() => onDeleteStation(activeStation.id)}
+                className="p-1 rounded-full text-[var(--text-faint)] hover:text-rose-500 transition-colors shrink-0"
+                title="Remove custom station"
+                aria-label="Remove custom station"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {activeStation?.description && (
+            <p className="text-[11px] text-[var(--text-faint)] truncate">
               {activeStation.description}
             </p>
           )}
         </div>
-
-        {/* Play/Pause Button */}
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-          <button
-            onClick={togglePlay}
-            disabled={isLoading && !isPlaying}
-            className="flex items-center justify-center w-11 h-11 rounded-full bg-[var(--accent-main)] text-white hover:bg-[var(--accent-hover)] transition-transform active:scale-95 shadow-sm"
-            title={isPlaying ? 'Pause' : 'Play'}
-          >
-            {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : isPlaying ? (
-              <Pause className="w-5 h-5 fill-current" />
-            ) : (
-              <Play className="w-5 h-5 fill-current ml-0.5" />
-            )}
-          </button>
-        </div>
       </div>
 
-      {streamError && (
-        <p className="text-xs text-amber-600/90 dark:text-amber-400/90 mb-2 bg-amber-500/10 p-2 rounded-lg">
-          {streamError}
-        </p>
-      )}
-
-      {/* Volume slider & mute */}
-      <div className="flex items-center gap-3 pt-2 border-t border-[var(--border-subtle)]">
+      {/* Subtle Volume Control */}
+      <div className="flex items-center gap-2.5 pt-0.5">
         <button
-          onClick={toggleMute}
-          className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+          type="button"
+          onClick={() => setIsMuted(!isMuted)}
+          className="text-[var(--text-faint)] hover:text-[var(--text-main)] transition-colors"
           title={isMuted ? 'Unmute' : 'Mute'}
+          aria-label={isMuted ? 'Unmute radio' : 'Mute radio'}
         >
           {isMuted || radioVolume === 0 ? (
-            <VolumeX className="w-4 h-4" />
+            <VolumeX className="w-3.5 h-3.5" />
           ) : (
-            <Volume2 className="w-4 h-4" />
+            <Volume2 className="w-3.5 h-3.5" />
           )}
         </button>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.05"
+
+        <CalmSlider
           value={isMuted ? 0 : radioVolume}
-          onChange={(e) => {
+          min={0}
+          max={1}
+          step={0.02}
+          onChange={(val) => {
             setIsMuted(false);
-            onVolumeChange(parseFloat(e.target.value));
+            onVolumeChange(val);
           }}
+          ariaLabel="Radio volume"
           className="flex-1"
         />
-        <span className="text-[11px] font-mono text-[var(--text-muted)] w-8 text-right">
+
+        <span className="text-[10px] font-mono text-[var(--text-faint)] w-7 text-right">
           {isMuted ? '0%' : `${Math.round(radioVolume * 100)}%`}
         </span>
       </div>
+
+      {streamError && (
+        <p className="text-[11px] text-[var(--text-muted)] italic">{streamError}</p>
+      )}
     </div>
   );
 };

@@ -1,67 +1,76 @@
-import { Room, RadioStation, StudySession, PlayHistoryItem, DashboardStats } from '../types/index.js';
+import {
+  Room,
+  RadioStation,
+  StudySession,
+  PlayHistoryItem,
+  DashboardStats,
+  YouTubeMetadata,
+} from '../types/index.js';
+import { localStudyStorage } from './storage.js';
 
-const API_BASE = '/api';
-
+/**
+ * Client-side Storage API Adapter
+ *
+ * Runs fully locally in the browser with localStorage persistence so that
+ * the application is 100% static, fast, private, and hostable on GitHub Pages.
+ */
 export const api = {
-  // Rooms
+  // --- Rooms ---
   async getRooms(): Promise<Room[]> {
-    const res = await fetch(`${API_BASE}/rooms`);
-    if (!res.ok) throw new Error('Failed to fetch rooms');
-    return res.json();
+    return Promise.resolve(localStudyStorage.getRooms());
   },
 
-  async createRoom(data: Omit<Room, 'id' | 'created_at' | 'updated_at'>): Promise<Room> {
-    const res = await fetch(`${API_BASE}/rooms`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to create room');
-    return res.json();
+  async createRoom(
+    data: Partial<Omit<Room, 'id' | 'created_at' | 'updated_at'>> & { name: string }
+  ): Promise<Room> {
+    return Promise.resolve(localStudyStorage.createRoom(data));
   },
 
-  async updateRoom(id: string, data: Partial<Room>): Promise<Room> {
-    const res = await fetch(`${API_BASE}/rooms/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to update room');
-    return res.json();
+  async updateRoom(
+    id: string,
+    data: Partial<Omit<Room, 'id' | 'created_at' | 'updated_at'>>
+  ): Promise<Room> {
+    return Promise.resolve(localStudyStorage.updateRoom(id, data));
   },
 
   async deleteRoom(id: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/rooms/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Failed to delete room');
+    localStudyStorage.deleteRoom(id);
+    return Promise.resolve();
   },
 
-  // Radios
+  // --- Radios ---
   async getRadios(): Promise<RadioStation[]> {
-    const res = await fetch(`${API_BASE}/radios`);
-    if (!res.ok) throw new Error('Failed to fetch radios');
-    return res.json();
+    return Promise.resolve(localStudyStorage.getRadios());
   },
 
-  async createRadio(data: { name: string; description?: string; url: string; stream_type?: string; genre?: string }): Promise<RadioStation> {
-    const res = await fetch(`${API_BASE}/radios`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to create radio station');
-    return res.json();
+  async createRadio(data: {
+    name: string;
+    description?: string;
+    url: string;
+    stream_type?: string;
+    genre?: string;
+  }): Promise<RadioStation> {
+    return Promise.resolve(localStudyStorage.createRadio(data));
   },
 
   async deleteRadio(id: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/radios/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Failed to delete radio');
+    localStudyStorage.deleteRadio(id);
+    return Promise.resolve();
   },
 
-  // Sessions
+  // --- YouTube Metadata & Audio Fallback ---
+  async getYouTubeMeta(url: string): Promise<YouTubeMetadata> {
+    return localStudyStorage.getYouTubeMeta(url);
+  },
+
+  getYouTubeAudioStreamUrl(url: string): string {
+    // Pure static deployment: audio plays client-side via YouTube IFrame API
+    return url;
+  },
+
+  // --- Study Sessions ---
   async getSessions(limit = 50): Promise<StudySession[]> {
-    const res = await fetch(`${API_BASE}/sessions?limit=${limit}`);
-    if (!res.ok) throw new Error('Failed to fetch sessions');
-    return res.json();
+    return Promise.resolve(localStudyStorage.getSessions(limit));
   },
 
   async createSession(data: {
@@ -75,20 +84,12 @@ export const api = {
     ended_at: string;
     notes?: string | null;
   }): Promise<StudySession> {
-    const res = await fetch(`${API_BASE}/sessions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to save session');
-    return res.json();
+    return Promise.resolve(localStudyStorage.createSession(data));
   },
 
-  // Play History
+  // --- Play History ---
   async getHistory(limit = 50): Promise<PlayHistoryItem[]> {
-    const res = await fetch(`${API_BASE}/history?limit=${limit}`);
-    if (!res.ok) throw new Error('Failed to fetch play history');
-    return res.json();
+    return Promise.resolve(localStudyStorage.getHistory(limit));
   },
 
   async recordPlayStart(data: {
@@ -98,30 +99,29 @@ export const api = {
     session_id?: string | null;
     started_at: string;
   }): Promise<PlayHistoryItem> {
-    const res = await fetch(`${API_BASE}/history`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, duration_seconds: 0 }),
-    });
-    if (!res.ok) throw new Error('Failed to record play start');
-    return res.json();
+    return Promise.resolve(localStudyStorage.recordPlayStart(data));
   },
 
   async updatePlayEnd(id: string, durationSeconds: number): Promise<void> {
-    await fetch(`${API_BASE}/history/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        duration_seconds: durationSeconds,
-        ended_at: new Date().toISOString(),
-      }),
-    });
+    localStudyStorage.updatePlayEnd(id, durationSeconds);
+    return Promise.resolve();
   },
 
-  // Dashboard Stats
+  // --- Dashboard Stats ---
   async getStats(): Promise<DashboardStats> {
-    const res = await fetch(`${API_BASE}/stats`);
-    if (!res.ok) throw new Error('Failed to fetch stats');
-    return res.json();
+    return Promise.resolve(localStudyStorage.getStats());
+  },
+
+  // --- Data Management & Backup ---
+  exportBackup(): string {
+    return localStudyStorage.exportBackup();
+  },
+
+  restoreBackup(jsonString: string): boolean {
+    return localStudyStorage.restoreBackup(jsonString);
+  },
+
+  resetAll(): void {
+    localStudyStorage.resetAll();
   },
 };

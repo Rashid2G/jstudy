@@ -27,35 +27,53 @@ describe('API Routes', () => {
       expect(res.body.length).toBeGreaterThanOrEqual(4);
     });
 
-    it('POST /api/rooms validates input and creates room', async () => {
+    it('POST /api/rooms creates rooms with or without breaks', async () => {
       const invalid = await request(app).post('/api/rooms').send({ name: '' });
       expect(invalid.status).toBe(400);
 
-      const res = await request(app).post('/api/rooms').send({
+      const withBreaks = await request(app).post('/api/rooms').send({
         name: 'Late Night Physics',
         description: 'Quiet contemplation',
         theme: 'dusk',
         timer_work_minutes: 35,
         timer_break_minutes: 7,
+        breaks_enabled: 1,
       });
 
-      expect(res.status).toBe(201);
-      expect(res.body.id).toBeDefined();
-      expect(res.body.name).toBe('Late Night Physics');
-      expect(res.body.timer_work_minutes).toBe(35);
+      expect(withBreaks.status).toBe(201);
+      expect(withBreaks.body.timer_work_minutes).toBe(35);
+      expect(withBreaks.body.timer_break_minutes).toBe(7);
+      expect(withBreaks.body.breaks_enabled).toBe(1);
+
+      const noBreaks = await request(app).post('/api/rooms').send({
+        name: 'Uninterrupted Thesis Block',
+        theme: 'nordic',
+        timer_work_minutes: 65,
+        breaks_enabled: 0,
+      });
+
+      expect(noBreaks.status).toBe(201);
+      expect(noBreaks.body.timer_work_minutes).toBe(65);
+      expect(noBreaks.body.timer_break_minutes).toBe(0);
+      expect(noBreaks.body.breaks_enabled).toBe(0);
     });
 
-    it('PUT /api/rooms/:id updates room', async () => {
+    it('PUT /api/rooms/:id updates room break settings and duration', async () => {
       const roomsRes = await request(app).get('/api/rooms');
       const target = roomsRes.body[0];
 
-      const res = await request(app)
-        .put(`/api/rooms/${target.id}`)
-        .send({ name: 'Updated Room Name', timer_work_minutes: 55 });
+      const res = await request(app).put(`/api/rooms/${target.id}`).send({
+        name: 'Updated Room Name',
+        timer_work_minutes: 55,
+        breaks_enabled: 0,
+        timer_break_minutes: 0,
+      });
 
       expect(res.status).toBe(200);
       expect(res.body.name).toBe('Updated Room Name');
       expect(res.body.timer_work_minutes).toBe(55);
+      expect(res.body.breaks_enabled).toBe(0);
+      expect(res.body.timer_break_minutes).toBe(0);
     });
 
     it('DELETE /api/rooms/:id deletes room', async () => {
@@ -71,28 +89,33 @@ describe('API Routes', () => {
     });
   });
 
-  describe('/api/radios', () => {
-    it('GET /api/radios returns curated stations', async () => {
+  describe('/api/radios & /api/youtube', () => {
+    it('GET /api/radios returns curated YouTube and Icecast stations', async () => {
       const res = await request(app).get('/api/radios');
       expect(res.status).toBe(200);
-      expect(res.body.length).toBeGreaterThanOrEqual(4);
+      expect(res.body.some((s: any) => s.stream_type === 'youtube')).toBe(true);
     });
 
-    it('POST /api/radios creates custom station and validates', async () => {
+    it('POST /api/radios auto-detects YouTube video and live stream links', async () => {
       const invalid = await request(app).post('/api/radios').send({ name: 'Incomplete' });
       expect(invalid.status).toBe(400);
 
-      const res = await request(app).post('/api/radios').send({
-        name: 'Chill Anime Beats',
-        description: 'Lo-fi beats from stream',
-        url: 'https://stream.example.com/audio.mp3',
-        stream_type: 'audio',
-        genre: 'lofi'
+      const ytRes = await request(app).post('/api/radios').send({
+        name: 'Rainy Study Piano YouTube',
+        url: 'https://youtu.be/5yx6BWlEVcY?si=test',
       });
 
-      expect(res.status).toBe(201);
-      expect(res.body.name).toBe('Chill Anime Beats');
-      expect(res.body.is_curated).toBe(0);
+      expect(ytRes.status).toBe(201);
+      expect(ytRes.body.stream_type).toBe('youtube');
+      expect(ytRes.body.url).toBe('https://www.youtube.com/watch?v=5yx6BWlEVcY');
+    });
+
+    it('GET /api/youtube/meta and /api/youtube/stream reject non-YouTube URLs safely', async () => {
+      const badMeta = await request(app).get('/api/youtube/meta?url=https://example.com/audio.mp3');
+      expect(badMeta.status).toBe(400);
+
+      const badStream = await request(app).get('/api/youtube/stream?url=not-a-valid-url');
+      expect(badStream.status).toBe(400);
     });
   });
 
@@ -123,8 +146,8 @@ describe('API Routes', () => {
   describe('/api/history', () => {
     it('POST and PUT /api/history tracks audio sessions', async () => {
       const startRes = await request(app).post('/api/history').send({
-        radio_id: 'radio-groove-salad',
-        radio_name: 'SomaFM Groove Salad',
+        radio_id: 'radio-yt-lofigirl',
+        radio_name: 'Lofi Girl — Study Beats Live',
         duration_seconds: 0,
         started_at: new Date().toISOString(),
       });
