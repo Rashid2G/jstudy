@@ -54,66 +54,12 @@ function getSafeStorage(): Storage {
 
 export const defaultCuratedRadios: Omit<RadioStation, 'created_at'>[] = [
   {
-    id: 'radio-yt-lofigirl',
-    name: 'Lofi Girl — Study Beats Live',
-    description: '24/7 lofi hip hop radio — beats to relax/study to (audio-only stream).',
-    url: 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
+    id: 'radio-yt-halloween',
+    name: '24/7 Halloween Ambience — Spooky Lofi',
+    description: '24/7 halloween ambience 🎃 spooky lofi to get chills to (Lofi Girl).',
+    url: 'https://music.youtube.com/watch?v=0sfDth4lMLc&si=yaLbbTtZ0JMfjpR3',
     stream_type: 'youtube',
     genre: 'lofi live',
-    is_curated: 1,
-  },
-  {
-    id: 'radio-yt-chillhop',
-    name: 'Chillhop Radio — Study & Relax Live',
-    description: 'Mellow jazzy & lofi hip hop beats 24/7 live stream.',
-    url: 'https://www.youtube.com/watch?v=5yx6BWlEVcY',
-    stream_type: 'youtube',
-    genre: 'chillhop live',
-    is_curated: 1,
-  },
-  {
-    id: 'radio-yt-synthwave',
-    name: 'Lofi Synthwave — Chill Cyber Beats',
-    description: 'Retro futuristic chill synthwave stream for coding and deep work.',
-    url: 'https://www.youtube.com/watch?v=4xDzrJKXOOY',
-    stream_type: 'youtube',
-    genre: 'synthwave',
-    is_curated: 1,
-  },
-  {
-    id: 'radio-groove-salad',
-    name: 'SomaFM Groove Salad',
-    description: 'A nicely chilled plate of ambient/downtempo beats and grooves.',
-    url: 'https://ice1.somafm.com/groovesalad-128-mp3',
-    stream_type: 'audio',
-    genre: 'ambient',
-    is_curated: 1,
-  },
-  {
-    id: 'radio-drone-zone',
-    name: 'SomaFM Drone Zone',
-    description: 'Atmospheric minimalist ambient textures for deep reading.',
-    url: 'https://ice1.somafm.com/dronezone-128-mp3',
-    stream_type: 'audio',
-    genre: 'drone',
-    is_curated: 1,
-  },
-  {
-    id: 'radio-nightwave',
-    name: 'Nightwave Plaza',
-    description: 'Late-night vaporwave and mellow synth lofi radio.',
-    url: 'https://radio.plaza.one/mp3',
-    stream_type: 'audio',
-    genre: 'vaporwave',
-    is_curated: 1,
-  },
-  {
-    id: 'radio-synth-rain',
-    name: 'Rain & Ambient Synthesis',
-    description: 'Procedurally generated gentle rain sounds via Web Audio.',
-    url: 'ambient:rain',
-    stream_type: 'ambient',
-    genre: 'nature',
     is_curated: 1,
   },
 ];
@@ -128,7 +74,7 @@ export const defaultStarterRooms: Omit<Room, 'created_at' | 'updated_at'>[] = [
     timer_break_minutes: 10,
     breaks_enabled: 1,
     timer_mode: 'pomodoro',
-    default_radio_id: 'radio-drone-zone',
+    default_radio_id: 'radio-yt-halloween',
     ambient_sound: 'rain',
     ambient_volume: 0.35,
     radio_volume: 0.7,
@@ -142,7 +88,7 @@ export const defaultStarterRooms: Omit<Room, 'created_at' | 'updated_at'>[] = [
     timer_break_minutes: 5,
     breaks_enabled: 1,
     timer_mode: 'pomodoro',
-    default_radio_id: 'radio-yt-lofigirl',
+    default_radio_id: 'radio-yt-halloween',
     ambient_sound: 'fireplace',
     ambient_volume: 0.3,
     radio_volume: 0.7,
@@ -156,7 +102,7 @@ export const defaultStarterRooms: Omit<Room, 'created_at' | 'updated_at'>[] = [
     timer_break_minutes: 0,
     breaks_enabled: 0,
     timer_mode: 'continuous',
-    default_radio_id: 'radio-yt-chillhop',
+    default_radio_id: 'radio-yt-halloween',
     ambient_sound: 'cafe',
     ambient_volume: 0.35,
     radio_volume: 0.75,
@@ -170,7 +116,7 @@ export const defaultStarterRooms: Omit<Room, 'created_at' | 'updated_at'>[] = [
     timer_break_minutes: 10,
     breaks_enabled: 1,
     timer_mode: 'custom',
-    default_radio_id: 'radio-groove-salad',
+    default_radio_id: 'radio-yt-halloween',
     ambient_sound: 'waves',
     ambient_volume: 0.25,
     radio_volume: 0.7,
@@ -216,13 +162,18 @@ export class LocalStudyStorage {
     }
 
     const existingRadios = this.read<RadioStation[]>(STORAGE_KEYS.RADIOS, []);
-    if (!existingRadios || existingRadios.length === 0) {
+    const validRadios = existingRadios.filter(
+      (r) => r.id === 'radio-yt-halloween' || r.url.includes('0sfDth4lMLc')
+    );
+    if (validRadios.length === 0) {
       const now = new Date().toISOString();
       const seeded: RadioStation[] = defaultCuratedRadios.map((r) => ({
         ...r,
         created_at: now,
       }));
       this.write(STORAGE_KEYS.RADIOS, seeded);
+    } else {
+      this.write(STORAGE_KEYS.RADIOS, validRadios);
     }
   }
 

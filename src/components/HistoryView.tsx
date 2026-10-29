@@ -4,11 +4,11 @@ import { formatDuration, formatDisplayDate } from '../utils/format.js';
 
 interface Props {
   history: PlayHistoryItem[];
-  rooms: Room[];
+  rooms?: Room[];
 }
 
-export const HistoryView: React.FC<Props> = ({ history, rooms }) => {
-  const roomMap = new Map(rooms.map((r) => [r.id, r.name]));
+export const HistoryView: React.FC<Props> = ({ history, rooms = [] }) => {
+  const roomMap = new Map((rooms || []).map((r) => [r.id, r.name]));
 
   return (
     <section aria-label="Radio Play History" className="py-4">
@@ -28,14 +28,16 @@ export const HistoryView: React.FC<Props> = ({ history, rooms }) => {
       ) : (
         <div className="divide-y divide-[var(--border-hairline)]">
           {history.map((item) => {
-            const roomName = item.room_id ? roomMap.get(item.room_id) || 'Room' : 'Focus';
+            const roomName = item.room_id ? roomMap.get(item.room_id) : null;
             return (
               <div key={item.id} className="py-3.5 flex items-baseline justify-between gap-4">
                 <div className="min-w-0 flex items-baseline gap-2.5 flex-wrap">
                   <span className="text-sm font-medium text-[var(--text-main)]">
                     {item.radio_name}
                   </span>
-                  <span className="text-xs text-[var(--text-faint)]">{roomName}</span>
+                  {roomName && (
+                    <span className="text-xs text-[var(--text-faint)]">{roomName}</span>
+                  )}
                 </div>
 
                 <div className="text-right shrink-0 flex items-baseline gap-4">

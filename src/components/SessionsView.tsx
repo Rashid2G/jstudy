@@ -5,11 +5,11 @@ import { formatDuration, formatDisplayDate } from '../utils/format.js';
 interface Props {
   sessions: StudySession[];
   stats: DashboardStats;
-  rooms: Room[];
+  rooms?: Room[];
 }
 
-export const SessionsView: React.FC<Props> = ({ sessions, stats, rooms }) => {
-  const roomMap = new Map(rooms.map((r) => [r.id, r.name]));
+export const SessionsView: React.FC<Props> = ({ sessions, stats, rooms = [] }) => {
+  const roomMap = new Map((rooms || []).map((r) => [r.id, r.name]));
 
   return (
     <section aria-label="Study Sessions" className="py-4 space-y-10">
@@ -70,7 +70,7 @@ export const SessionsView: React.FC<Props> = ({ sessions, stats, rooms }) => {
         ) : (
           <div className="divide-y divide-[var(--border-hairline)]">
             {sessions.map((s) => {
-              const roomName = s.room_id ? roomMap.get(s.room_id) || 'Room' : 'Focus';
+              const roomName = s.room_id ? roomMap.get(s.room_id) : null;
               return (
                 <div key={s.id} className="py-3.5 flex items-baseline justify-between gap-4">
                   <div className="min-w-0">
@@ -78,9 +78,11 @@ export const SessionsView: React.FC<Props> = ({ sessions, stats, rooms }) => {
                       <span className="text-sm font-medium text-[var(--text-main)]">
                         {s.title}
                       </span>
-                      <span className="text-xs text-[var(--text-faint)]">
-                        {roomName}
-                      </span>
+                      {roomName && (
+                        <span className="text-xs text-[var(--text-faint)]">
+                          {roomName}
+                        </span>
+                      )}
                     </div>
                     {s.notes && (
                       <p className="text-xs text-[var(--text-muted)] mt-0.5 italic">

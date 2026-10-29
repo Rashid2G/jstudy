@@ -1,7 +1,8 @@
 {
-  "name": "studinty",
+  "name": "jstudy",
   "version": "1.0.0",
-  "description": "Minimal, calm study companion with focus timers, lofi radios, custom rooms, and persistent history",
+  "description": "Everything has become fast, distracting, and overwhelming, and the only way to focus these days is to turn the noise down. Achive more, do less.",
+  "homepage": "https://jstudy.rashidk.com",
   "main": "server/index.ts",
   "type": "module",
   "scripts": {
@@ -19,7 +20,8 @@
     "lofi",
     "focus",
     "sqlite",
-    "minimal"
+    "minimal",
+    "calm"
   ],
   "dependencies": {
     "@radix-ui/react-dialog": "^1.3.1",

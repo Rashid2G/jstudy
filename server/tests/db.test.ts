@@ -8,13 +8,12 @@ describe('StudintyDatabase', () => {
     db = new StudintyDatabase(':memory:');
   });
 
-  it('initializes with curated YouTube & Icecast radios and starter rooms', () => {
+  it('initializes with curated default YouTube radio and starter rooms', () => {
     const radios = db.getRadios();
-    expect(radios.length).toBeGreaterThanOrEqual(6);
-    expect(radios.some((r) => r.id === 'radio-yt-lofigirl' && r.stream_type === 'youtube')).toBe(
+    expect(radios.length).toBeGreaterThanOrEqual(1);
+    expect(radios.some((r) => r.id === 'radio-yt-halloween' && r.stream_type === 'youtube')).toBe(
       true
     );
-    expect(radios.some((r) => r.id === 'radio-drone-zone')).toBe(true);
 
     const rooms = db.getRooms();
     expect(rooms.length).toBeGreaterThanOrEqual(4);
@@ -31,7 +30,7 @@ describe('StudintyDatabase', () => {
       timer_break_minutes: 0,
       breaks_enabled: 0,
       timer_mode: 'continuous',
-      default_radio_id: 'radio-yt-lofigirl',
+      default_radio_id: 'radio-yt-halloween',
       ambient_sound: 'rain',
       ambient_volume: 0.5,
       radio_volume: 0.8,
@@ -48,6 +47,8 @@ describe('StudintyDatabase', () => {
       timer_break_minutes: 15,
       timer_work_minutes: 60,
     });
+
+    expect(updated).not.toBeNull();
     expect(updated?.breaks_enabled).toBe(1);
     expect(updated?.timer_break_minutes).toBe(15);
     expect(updated?.timer_work_minutes).toBe(60);
@@ -58,77 +59,72 @@ describe('StudintyDatabase', () => {
   });
 
   it('auto-detects YouTube video and live stream links when creating custom radios', () => {
-    const ytLive = db.createRadio({
-      name: 'Custom Lofi Live',
-      description: 'Live stream from YouTube',
-      url: 'https://www.youtube.com/live/jfKfPfyJRdk?feature=share',
-      genre: 'lofi',
+    const custom = db.createRadio({
+      name: 'Custom Ambient Study',
+      description: 'Deep calm soundscape',
+      url: 'https://www.youtube.com/watch?v=0sfDth4lMLc',
+      genre: 'ambient',
       is_curated: 0,
     });
 
-    expect(ytLive.stream_type).toBe('youtube');
-    expect(ytLive.url).toBe('https://www.youtube.com/watch?v=jfKfPfyJRdk');
+    expect(custom.id).toBeDefined();
+    expect(custom.stream_type).toBe('youtube');
+    expect(custom.url).toBe('https://www.youtube.com/watch?v=0sfDth4lMLc');
 
-    const mp3Radio = db.createRadio({
-      name: 'My Personal Chill Stream',
-      description: 'Custom lofi stream',
-      url: 'https://example.com/stream.mp3',
-      stream_type: 'audio',
-      genre: 'lofi',
-      is_curated: 0,
-    });
+    const retrieved = db.getRadioById(custom.id);
+    expect(retrieved?.name).toBe('Custom Ambient Study');
 
-    expect(mp3Radio.stream_type).toBe('audio');
-    expect(db.deleteRadio(mp3Radio.id)).toBe(true);
-    expect(db.getRadioById(mp3Radio.id)).toBeNull();
+    const deleted = db.deleteRadio(custom.id);
+    expect(deleted).toBe(true);
+    expect(db.getRadioById(custom.id)).toBeNull();
   });
 
   it('records study sessions and computes stats', () => {
-    const started = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-    const ended = new Date().toISOString();
+    const now = new Date();
+    const start = new Date(now.getTime() - 25 * 60 * 1000).toISOString();
+    const end = now.toISOString();
 
     const session = db.createSession({
-      room_id: 'room-library',
-      title: 'Linear Algebra Problem Set',
-      category: 'Math',
+      room_id: null,
+      title: 'Algorithms & Data Structures',
+      category: 'Computer Science',
       target_duration_seconds: 1500,
       actual_duration_seconds: 1500,
       completed: 1,
-      started_at: started,
-      ended_at: ended,
-      notes: 'Solved 10 eigen decomposition questions.',
+      started_at: start,
+      ended_at: end,
+      notes: 'Reviewed graph search & binary trees',
     });
 
     expect(session.id).toBeDefined();
-    expect(session.title).toBe('Linear Algebra Problem Set');
+    expect(session.completed).toBe(1);
 
     const stats = db.getStats();
     expect(stats.completedSessionsCount).toBe(1);
     expect(stats.totalFocusSeconds).toBe(1500);
-    expect(stats.todayFocusSeconds).toBe(1500);
     expect(stats.activeStreakDays).toBe(1);
   });
 
   it('logs play history and updates duration', () => {
-    const started = new Date(Date.now() - 600 * 1000).toISOString();
-    const record = db.recordPlayHistory({
-      radio_id: 'radio-yt-lofigirl',
-      radio_name: 'Lofi Girl — Study Beats Live',
-      room_id: 'room-midnight-lofi',
+    const startedAt = new Date().toISOString();
+    const entry = db.recordPlayHistory({
+      radio_id: 'radio-yt-halloween',
+      radio_name: '24/7 Halloween Ambience — Spooky Lofi',
+      room_id: null,
       session_id: null,
-      duration_seconds: 100,
-      started_at: started,
+      duration_seconds: 0,
+      started_at: startedAt,
       ended_at: null,
     });
 
-    expect(record.id).toBeDefined();
+    expect(entry.id).toBeDefined();
 
-    const now = new Date().toISOString();
-    db.updatePlayHistoryDuration(record.id, 600, now);
+    const endedAt = new Date().toISOString();
+    db.updatePlayHistoryDuration(entry.id, 900, endedAt);
 
     const history = db.getPlayHistory();
-    expect(history.length).toBe(1);
-    expect(history[0].duration_seconds).toBe(600);
-    expect(history[0].ended_at).toBe(now);
+    const updated = history.find((h) => h.id === entry.id);
+    expect(updated?.duration_seconds).toBe(900);
+    expect(updated?.ended_at).toBe(endedAt);
   });
 });

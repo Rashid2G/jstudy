@@ -48,19 +48,24 @@ export const AmbientMixer: React.FC<Props> = ({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium uppercase tracking-widest text-[var(--text-faint)]">
-          Ambient Atmosphere
-        </span>
+        <div>
+          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-main)]">
+            Ambient Background Atmosphere
+          </span>
+          <p className="text-[11px] text-[var(--text-muted)]">
+            Procedurally synthesized calming noise layering
+          </p>
+        </div>
         {ambientSound !== 'none' && (
-          <span className="text-[10px] font-mono text-[var(--text-faint)]">
+          <span className="text-xs font-mono text-[var(--text-muted)] font-medium">
             {Math.round(ambientVolume * 100)}%
           </span>
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
         {SOUND_OPTIONS.map((opt) => {
           const Icon = opt.icon;
           const isActive = ambientSound === opt.id;
@@ -69,21 +74,21 @@ export const AmbientMixer: React.FC<Props> = ({
               key={opt.id}
               type="button"
               onClick={() => handleSelect(opt.id)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs transition-colors ${
+              className={`flex flex-col items-center justify-center p-3 rounded-2xl text-xs transition-all border ${
                 isActive
-                  ? 'bg-[var(--ink-wash-strong)] text-[var(--text-main)] font-medium'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash)]'
+                  ? 'border-[var(--accent-main)] bg-[var(--ink-wash-strong)] ring-2 ring-[var(--accent-main)]/30 text-[var(--text-main)] font-semibold shadow-sm'
+                  : 'border-[var(--border-hairline)] bg-[var(--ink-wash)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash-strong)]'
               }`}
             >
-              <Icon className="w-3.5 h-3.5" />
+              <Icon className="w-4 h-4 mb-1" />
               <span>{opt.label}</span>
             </button>
           );
         })}
       </div>
 
-      <div className="flex items-center gap-2.5 pt-0.5">
-        <span className="text-[10px] font-mono text-[var(--text-faint)]">Mix</span>
+      <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[var(--ink-wash)] border border-[var(--border-hairline)]">
+        <span className="text-xs font-medium text-[var(--text-muted)] shrink-0">Atmosphere Volume</span>
         <CalmSlider
           value={ambientSound === 'none' ? 0 : ambientVolume}
           min={0}
@@ -101,6 +106,9 @@ export const AmbientMixer: React.FC<Props> = ({
           ariaLabel="Ambient sound volume"
           className="flex-1"
         />
+        <span className="text-xs font-mono text-[var(--text-muted)] w-10 text-right font-medium">
+          {Math.round((ambientSound === 'none' ? 0 : ambientVolume) * 100)}%
+        </span>
       </div>
     </div>
   );
