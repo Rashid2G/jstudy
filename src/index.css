@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-main: #f5f4ef;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #eeece5;
+  --border-subtle: #e2dfd5;
+  --text-main: #2b2823;
+  --text-muted: #797468;
+  --accent-main: #556b5b;
+  --accent-soft: #e3ebe5;
+  --accent-hover: #445649;
+}
+
+body.theme-sage {
+  --bg-main: #f3f6f3;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #e8ede8;
+  --border-subtle: #dbe4dc;
+  --text-main: #222b24;
+  --text-muted: #647567;
+  --accent-main: #4a6750;
+  --accent-soft: #e2ede4;
+  --accent-hover: #3b5340;
+}
+
+body.theme-sand {
+  --bg-main: #f7f4ee;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #eee7dc;
+  --border-subtle: #e0d7c7;
+  --text-main: #332a21;
+  --text-muted: #7d6e5e;
+  --accent-main: #8c6e4e;
+  --accent-soft: #f4ecdf;
+  --accent-hover: #73593d;
+}
+
+body.theme-slate {
+  --bg-main: #f4f5f7;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #e8ebf0;
+  --border-subtle: #dbe0e8;
+  --text-main: #21262d;
+  --text-muted: #626d7a;
+  --accent-main: #4f5f73;
+  --accent-soft: #e5ebf2;
+  --accent-hover: #3d4a5b;
+}
+
+body.theme-dusk {
+  --bg-main: #18171e;
+  --bg-card: #201e28;
+  --bg-card-subtle: #292734;
+  --border-subtle: #363345;
+  --text-main: #eceaf2;
+  --text-muted: #9691a6;
+  --accent-main: #9e8cb8;
+  --accent-soft: #2e283d;
+  --accent-hover: #b4a3ce;
+}
+
+body.theme-nordic {
+  --bg-main: #f6f6f6;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #ececec;
+  --border-subtle: #dedede;
+  --text-main: #1f1f1f;
+  --text-muted: #6e6e6e;
+  --accent-main: #3d3d3d;
+  --accent-soft: #e8e8e8;
+  --accent-hover: #242424;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Custom minimal slider */
+input[type=range] {
+  -webkit-appearance: none;
+  background: transparent;
+}
+
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  background: var(--border-subtle);
+  border-radius: 9999px;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: var(--accent-main);
+  cursor: pointer;
+  margin-top: -5px;
+  transition: transform 0.1s ease;
+}
+
+input[type=range]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+/* Minimal smooth scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+studinty.db
+studinty.db-journal
+.env
+.DS_Store
+*.log
