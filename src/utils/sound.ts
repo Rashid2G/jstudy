@@ -1,4 +1,4 @@
-// Web Audio API based ambient synthesizer and gentle chime bell
+// Web Audio API based ambient synthesizer and gentle chime bells
 
 class SoundController {
   private ctx: AudioContext | null = null;
@@ -17,38 +17,92 @@ class SoundController {
     return this.ctx;
   }
 
-  // Plays a soothing Tibetan singing bowl chime when focus period completes
-  playChime(): void {
+  // Plays an uplifting resonant tone when the timer starts (plays for at least 2 seconds)
+  playTimerStart(): void {
     try {
       const ctx = this.getContext();
       const now = ctx.currentTime;
 
-      // Multi-harmonic gentle bell frequencies: Fundamental + Overtones
-      const frequencies = [432, 864, 1296, 2160];
-      const gains = [0.25, 0.12, 0.06, 0.02];
+      // Resonant harmonic chord: C5 (523.25 Hz), E5 (659.25 Hz), G5 (783.99 Hz)
+      const notes = [
+        { freq: 523.25, gain: 0.22, delay: 0 },
+        { freq: 659.25, gain: 0.18, delay: 0.12 },
+        { freq: 783.99, gain: 0.20, delay: 0.24 },
+        { freq: 1046.50, gain: 0.10, delay: 0.36 },
+      ];
 
-      frequencies.forEach((freq, index) => {
+      notes.forEach(({ freq, gain: peakGain, delay }) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
 
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now);
+        osc.frequency.setValueAtTime(freq, now + delay);
 
-        // Gentle envelope: fast 15ms attack, long peaceful exponential decay
-        const peakGain = gains[index];
-        gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.linearRampToValueAtTime(peakGain, now + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.8);
+        const startTime = now + delay;
+        gain.gain.setValueAtTime(0.0001, startTime);
+        gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 2.4);
 
         osc.connect(gain);
         gain.connect(ctx.destination);
 
-        osc.start(now);
-        osc.stop(now + 4.0);
+        osc.start(startTime);
+        osc.stop(startTime + 2.45);
       });
     } catch (e) {
-      console.warn('Web Audio chime could not play:', e);
+      console.warn('Web Audio timer start sound could not play:', e);
     }
+  }
+
+  // Plays an attention-grabbing multi-strike chime when time is up (plays for >3 seconds, at least 2s)
+  playTimerEnd(): void {
+    try {
+      const ctx = this.getContext();
+      const now = ctx.currentTime;
+
+      // 3-strike mindfulness alert sequence that clearly determines time is up and captures attention
+      const strikes = [
+        { time: 0.0, baseFreq: 587.33, peak: 0.28 }, // D5
+        { time: 0.7, baseFreq: 783.99, peak: 0.30 }, // G5
+        { time: 1.4, baseFreq: 1046.50, peak: 0.32 }, // C6
+      ];
+
+      strikes.forEach(({ time, baseFreq, peak }) => {
+        const strikeTime = now + time;
+        const harmonics = [
+          { mult: 1, relGain: 1.0 },
+          { mult: 2.01, relGain: 0.45 },
+          { mult: 3.02, relGain: 0.2 },
+          { mult: 4.5, relGain: 0.08 },
+        ];
+
+        harmonics.forEach(({ mult, relGain }) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(baseFreq * mult, strikeTime);
+
+          const nodePeak = peak * relGain;
+          gain.gain.setValueAtTime(0.0001, strikeTime);
+          gain.gain.linearRampToValueAtTime(nodePeak, strikeTime + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, strikeTime + 2.1);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(strikeTime);
+          osc.stop(strikeTime + 2.15);
+        });
+      });
+    } catch (e) {
+      console.warn('Web Audio timer end sound could not play:', e);
+    }
+  }
+
+  // Backwards-compatible alias for playTimerEnd
+  playChime(): void {
+    this.playTimerEnd();
   }
 
   // Ambient sound synthesizer (zero external dependencies)

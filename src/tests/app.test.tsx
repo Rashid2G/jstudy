@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import React from 'react';
+import React, { act } from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { App } from '../App.js';
 
 // Polyfill ResizeObserver & matchMedia for Radix UI and jsdom
@@ -25,7 +25,7 @@ beforeEach(() => {
   // Mock AudioContext
   window.AudioContext = vi.fn().mockImplementation(() => ({
     createGain: () => ({
-      gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() },
+      gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
       connect: vi.fn(),
     }),
     createOscillator: () => ({
@@ -37,7 +37,7 @@ beforeEach(() => {
     }),
     createBiquadFilter: () => ({
       type: 'lowpass',
-      frequency: { value: 1000 },
+      frequency: { value: 1000, setValueAtTime: vi.fn() },
       Q: { value: 1 },
       connect: vi.fn(),
     }),
@@ -59,18 +59,18 @@ beforeEach(() => {
 });
 
 describe('App React Component Integration', () => {
-  it('renders Studinty app header and room bar', async () => {
+  it('renders jstudy app header and timer side controls', async () => {
     await act(async () => {
       render(<App />);
     });
 
     // Header brand
-    expect(screen.getByText('studinty')).toBeDefined();
+    expect(screen.getByText('jstudy')).toBeDefined();
 
-    // Default room tabs loaded from storage
-    await waitFor(() => {
-      expect(screen.getByText('Silent Library Hall')).toBeDefined();
-    });
+    // Side controls on the sides of the timer
+    expect(screen.getByRole('button', { name: /Reset timer/i })).toBeDefined();
+    expect(screen.getByText(/Sound track on|Sound track off/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /Start Session/i })).toBeDefined();
   });
 
   it('renders navigation tabs and switches between Focus, Sessions, and Plays', async () => {
@@ -88,7 +88,6 @@ describe('App React Component Integration', () => {
 
     // Trigger Radix Tabs switch
     await act(async () => {
-      fireEvent.pointerDown(sessionsTab, { button: 0 });
       fireEvent.click(sessionsTab);
     });
 
@@ -98,7 +97,6 @@ describe('App React Component Integration', () => {
 
     // Switch to Plays tab
     await act(async () => {
-      fireEvent.pointerDown(playsTab, { button: 0 });
       fireEvent.click(playsTab);
     });
 
@@ -108,7 +106,6 @@ describe('App React Component Integration', () => {
 
     // Switch back to Focus tab
     await act(async () => {
-      fireEvent.pointerDown(focusTab, { button: 0 });
       fireEvent.click(focusTab);
     });
 
@@ -117,13 +114,18 @@ describe('App React Component Integration', () => {
     });
   });
 
-  it('toggles light/dark theme', async () => {
+  it('toggles light/dark theme via Settings modal', async () => {
     await act(async () => {
       render(<App />);
     });
 
-    // Find the dark/light toggle button in the header
-    const themeBtn = screen.getByTitle(/Switch to Light Mode|Switch to Dark Mode/i);
+    const settingsBtn = screen.getByTitle('Open Settings');
+    await act(async () => {
+      fireEvent.click(settingsBtn);
+    });
+
+    // Find the light or dark button in the settings modal
+    const themeBtn = screen.getByRole('button', { name: /^Light$/i });
     expect(themeBtn).toBeDefined();
 
     await act(async () => {
@@ -132,5 +134,24 @@ describe('App React Component Integration', () => {
 
     const isDark = document.documentElement.classList.contains('dark');
     expect(typeof isDark).toBe('boolean');
+  });
+
+  it('opens settings modal with timer durations and soundtrack settings', async () => {
+    await act(async () => {
+      render(<App />);
+    });
+
+    const settingsBtn = screen.getByTitle('Open Settings');
+    expect(settingsBtn).toBeDefined();
+
+    await act(async () => {
+      fireEvent.click(settingsBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Timer Intervals & Rhythms|Timer Durations/i)).toBeDefined();
+      expect(screen.getByText('Soundtrack Station')).toBeDefined();
+      expect(screen.getByText(/Color Palettes & Theme/i)).toBeDefined();
+    });
   });
 });

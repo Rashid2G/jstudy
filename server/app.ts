@@ -1,3 +1,5 @@
+import os from 'node:os';
+import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import { spawn } from 'node:child_process';
@@ -71,7 +73,7 @@ export function createApp(database?: StudintyDatabase) {
 
     const canonicalUrl = `https://www.youtube.com/watch?v=${videoId}`;
     const ytdlpBin = resolveBinary('yt-dlp', [
-      '/home/rashid/.local/share/mise/installs/python/latest/bin/yt-dlp',
+      path.join(os.homedir(), '.local/share/mise/installs/python/latest/bin/yt-dlp'),
       '/usr/local/bin/yt-dlp',
       '/usr/bin/yt-dlp',
     ]);
@@ -79,7 +81,7 @@ export function createApp(database?: StudintyDatabase) {
 
     const childEnv = {
       ...process.env,
-      PATH: `${process.env.PATH || ''}:/usr/bin:/usr/local/bin:/home/rashid/.local/share/mise/shims`,
+      PATH: `${process.env.PATH || ''}:/usr/bin:/usr/local/bin:${path.join(os.homedir(), '.local/share/mise/shims')}`,
     };
 
     let cleanedUp = false;

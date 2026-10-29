@@ -87,90 +87,15 @@ export class StudintyDatabase {
   private seedDefaults() {
     const curatedRadios: Omit<RadioStation, 'created_at'>[] = [
       {
-        id: 'radio-yt-lofigirl',
-        name: 'Lofi Girl — Study Beats Live',
-        description: '24/7 lofi hip hop radio — beats to relax/study to (audio-only stream).',
-        url: 'https://www.youtube.com/watch?v=rFZHOHl-L8A',
+        id: 'radio-yt-halloween',
+        name: '24/7 Halloween Ambience — Spooky Lofi',
+        description: '24/7 halloween ambience 🎃 spooky lofi to get chills to (Lofi Girl).',
+        url: 'https://music.youtube.com/watch?v=0sfDth4lMLc&si=yaLbbTtZ0JMfjpR3',
         stream_type: 'youtube',
         genre: 'lofi live',
         is_curated: 1,
       },
-      {
-        id: 'radio-yt-chillhop',
-        name: 'Chillhop Radio — Study & Relax Live',
-        description: 'Mellow jazzy & lofi hip hop beats 24/7 live stream.',
-        url: 'https://www.youtube.com/watch?v=7NOSDKb0HlU',
-        stream_type: 'youtube',
-        genre: 'chillhop live',
-        is_curated: 1,
-      },
-      {
-        id: 'radio-yt-rain',
-        name: 'Calming Lofi Rain — Live Radio',
-        description: 'Gentle rain and chill study beats 24/7 YouTube live stream.',
-        url: 'https://www.youtube.com/watch?v=vYIYIVmOo3Q',
-        stream_type: 'youtube',
-        genre: 'rain lofi',
-        is_curated: 1,
-      },
-      {
-        id: 'radio-yt-mix',
-        name: 'Lofi Study Mix — Classic Beats',
-        description: 'YouTube study mix streamed purely as background audio.',
-        url: 'https://www.youtube.com/watch?v=CFGLoQIhmow',
-        stream_type: 'youtube',
-        genre: 'youtube mix',
-        is_curated: 1,
-      },
-      {
-        id: 'radio-groove-salad',
-        name: 'SomaFM Groove Salad',
-        description: 'A nicely chilled plate of ambient/downtempo beats and grooves.',
-        url: 'https://ice1.somafm.com/groovesalad-128-mp3',
-        stream_type: 'audio',
-        genre: 'ambient',
-        is_curated: 1,
-      },
-      {
-        id: 'radio-drone-zone',
-        name: 'SomaFM Drone Zone',
-        description: 'Atmospheric minimalist ambient textures for deep reading.',
-        url: 'https://ice1.somafm.com/dronezone-128-mp3',
-        stream_type: 'audio',
-        genre: 'drone',
-        is_curated: 1,
-      },
-      {
-        id: 'radio-nightwave',
-        name: 'Nightwave Plaza',
-        description: 'Late-night vaporwave and mellow synth lofi radio.',
-        url: 'https://radio.plaza.one/mp3',
-        stream_type: 'audio',
-        genre: 'vaporwave',
-        is_curated: 1,
-      },
-      {
-        id: 'radio-lush',
-        name: 'SomaFM Lush',
-        description: 'Mellow vocals with a calm electronic chill influence.',
-        url: 'https://ice1.somafm.com/lush-128-mp3',
-        stream_type: 'audio',
-        genre: 'downtempo',
-        is_curated: 1,
-      },
-      {
-        id: 'radio-defcon',
-        name: 'SomaFM DEF CON',
-        description: 'Focused electronic music for coding and problem-solving.',
-        url: 'https://ice1.somafm.com/defcon-128-mp3',
-        stream_type: 'audio',
-        genre: 'electronic',
-        is_curated: 1,
-      },
     ];
-
-    const radioCountRow = this.db.prepare('SELECT COUNT(*) as count FROM radios').get() as { count: number | bigint };
-    const radioCount = Number(radioCountRow.count);
 
     const upsertCuratedRadio = this.db.prepare(`
       INSERT INTO radios (id, name, description, url, stream_type, genre, is_curated, created_at)
@@ -185,17 +110,21 @@ export class StudintyDatabase {
     `);
 
     const now = new Date().toISOString();
-    if (radioCount === 0) {
-      for (const r of curatedRadios) {
-        upsertCuratedRadio.run(r.id, r.name, r.description, r.url, r.stream_type, r.genre, r.is_curated, now);
-      }
-    } else {
-      // Keep curated YouTube stations updated to active live IDs
-      this.db.prepare("DELETE FROM radios WHERE id = 'radio-yt-synthwave' AND is_curated = 1").run();
-      for (const r of curatedRadios.filter((item) => item.stream_type === 'youtube')) {
-        upsertCuratedRadio.run(r.id, r.name, r.description, r.url, r.stream_type, r.genre, r.is_curated, now);
-      }
-    }
+    // Enforce that only the default radio station exists, removing all others
+    this.db.prepare('DELETE FROM radios WHERE id != ?').run(curatedRadios[0].id);
+    upsertCuratedRadio.run(
+      curatedRadios[0].id,
+      curatedRadios[0].name,
+      curatedRadios[0].description,
+      curatedRadios[0].url,
+      curatedRadios[0].stream_type,
+      curatedRadios[0].genre,
+      curatedRadios[0].is_curated,
+      now
+    );
+
+    // Update rooms to use the default radio station
+    this.db.prepare("UPDATE rooms SET default_radio_id = 'radio-yt-halloween'").run();
 
     const roomCountRow = this.db.prepare('SELECT COUNT(*) as count FROM rooms').get() as { count: number | bigint };
     const roomCount = Number(roomCountRow.count);
@@ -211,7 +140,7 @@ export class StudintyDatabase {
           timer_break_minutes: 10,
           breaks_enabled: 1,
           timer_mode: 'pomodoro',
-          default_radio_id: 'radio-drone-zone',
+          default_radio_id: 'radio-yt-halloween',
           ambient_sound: 'rain',
           ambient_volume: 0.35,
           radio_volume: 0.7,
@@ -225,7 +154,7 @@ export class StudintyDatabase {
           timer_break_minutes: 5,
           breaks_enabled: 1,
           timer_mode: 'pomodoro',
-          default_radio_id: 'radio-yt-lofigirl',
+          default_radio_id: 'radio-yt-halloween',
           ambient_sound: 'fireplace',
           ambient_volume: 0.3,
           radio_volume: 0.7,
@@ -239,7 +168,7 @@ export class StudintyDatabase {
           timer_break_minutes: 0,
           breaks_enabled: 0,
           timer_mode: 'continuous',
-          default_radio_id: 'radio-yt-chillhop',
+          default_radio_id: 'radio-yt-halloween',
           ambient_sound: 'cafe',
           ambient_volume: 0.35,
           radio_volume: 0.75,
@@ -253,7 +182,7 @@ export class StudintyDatabase {
           timer_break_minutes: 10,
           breaks_enabled: 1,
           timer_mode: 'custom',
-          default_radio_id: 'radio-groove-salad',
+          default_radio_id: 'radio-yt-halloween',
           ambient_sound: 'waves',
           ambient_volume: 0.25,
           radio_volume: 0.7,
@@ -489,7 +418,10 @@ export class StudintyDatabase {
 
   updatePlayHistoryDuration(id: string, durationSeconds: number, endedAt: string): void {
     this.db.prepare(`
-      UPDATE play_history SET duration_seconds = ?, ended_at = ? WHERE id = ?
+      UPDATE play_history SET
+        duration_seconds = ?,
+        ended_at = ?
+      WHERE id = ?
     `).run(durationSeconds, endedAt, id);
   }
 
@@ -498,49 +430,55 @@ export class StudintyDatabase {
     const totalRow = this.db.prepare(`
       SELECT
         COALESCE(SUM(actual_duration_seconds), 0) as totalFocusSeconds,
-        COUNT(*) as completedSessionsCount
+        COUNT(CASE WHEN completed = 1 THEN 1 END) as completedSessionsCount
       FROM sessions
-      WHERE completed = 1
     `).get() as { totalFocusSeconds: number | bigint; completedSessionsCount: number | bigint };
 
-    const today = new Date().toISOString().slice(0, 10);
+    const todayStr = new Date().toLocaleDateString('en-CA');
     const todayRow = this.db.prepare(`
       SELECT COALESCE(SUM(actual_duration_seconds), 0) as todayFocusSeconds
       FROM sessions
-      WHERE completed = 1 AND started_at >= ?
-    `).get(`${today}T00:00:00.000Z`) as { todayFocusSeconds: number | bigint };
+      WHERE substr(started_at, 1, 10) = ?
+    `).get(todayStr) as { todayFocusSeconds: number | bigint };
 
-    const datesRow = this.db.prepare(`
-      SELECT DISTINCT substr(started_at, 1, 10) as study_date
+    const sessionDays = this.db.prepare(`
+      SELECT DISTINCT substr(started_at, 1, 10) as day
       FROM sessions
       WHERE completed = 1
-      ORDER BY study_date DESC
-    `).all() as { study_date: string }[];
+      ORDER BY day DESC
+    `).all() as { day: string }[];
 
-    let streak = 0;
-    if (datesRow.length > 0) {
-      const dates = new Set(datesRow.map((d) => d.study_date));
-      const currentCheck = new Date();
-      const todayStr = currentCheck.toISOString().slice(0, 10);
-      if (!dates.has(todayStr)) {
-        currentCheck.setDate(currentCheck.getDate() - 1);
+    const daysSet = new Set(sessionDays.map((d) => d.day));
+    let streakDays = 0;
+    const checkDate = new Date();
+
+    const todayDayStr = checkDate.toLocaleDateString('en-CA');
+    if (daysSet.has(todayDayStr)) {
+      streakDays += 1;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toLocaleDateString('en-CA');
+      if (daysSet.has(yesterdayStr)) {
+        checkDate.setDate(checkDate.getDate() - 1);
       }
+    }
 
-      while (true) {
-        const checkStr = currentCheck.toISOString().slice(0, 10);
-        if (dates.has(checkStr)) {
-          streak++;
-          currentCheck.setDate(currentCheck.getDate() - 1);
-        } else {
-          break;
-        }
+    while (streakDays > 0) {
+      const prevStr = checkDate.toLocaleDateString('en-CA');
+      if (daysSet.has(prevStr)) {
+        streakDays += 1;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
       }
     }
 
     return {
       totalFocusSeconds: Number(totalRow.totalFocusSeconds),
       completedSessionsCount: Number(totalRow.completedSessionsCount),
-      activeStreakDays: streak,
+      activeStreakDays: streakDays,
       todayFocusSeconds: Number(todayRow.todayFocusSeconds),
     };
   }

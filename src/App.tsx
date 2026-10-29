@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Room,
   RadioStation,
   StudySession,
   PlayHistoryItem,
@@ -11,16 +10,13 @@ import {
 } from './types/index.js';
 import { api } from './services/api.js';
 import { Header } from './components/Header.js';
-import { RoomBar } from './components/RoomBar.js';
 import { Timer } from './components/Timer.js';
-import { RadioPlayer } from './components/RadioPlayer.js';
-import { AmbientMixer } from './components/AmbientMixer.js';
+import { AppleWidgetsShelf } from './components/widgets/AppleWidgetsShelf.js';
 import { SessionsView } from './components/SessionsView.js';
 import { HistoryView } from './components/HistoryView.js';
-import { RoomModal } from './components/RoomModal.js';
-import { RadioModal } from './components/RadioModal.js';
+import { SettingsModal } from './components/SettingsModal.js';
+import { SoundtrackEngine } from './components/SoundtrackEngine.js';
 import { ZenMode } from './components/ZenMode.js';
-import { sound } from './utils/sound.js';
 import { useStudyTimer } from './hooks/useStudyTimer.js';
 
 function getInitialColorMode(): ColorMode {
@@ -30,16 +26,53 @@ function getInitialColorMode(): ColorMode {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-export function App() {
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-  const [radios, setRadios] = useState<RadioStation[]>([]);
-  const [currentStationId, setCurrentStationId] = useState<string | null>(null);
+function getInitialTheme(): CalmTheme {
+  if (typeof window === 'undefined') return 'sage';
+  const saved = window.localStorage.getItem('studinty-theme') as CalmTheme;
+  if (['sage', 'sand', 'slate', 'dusk', 'nordic'].includes(saved)) return saved;
+  return 'sage';
+}
 
-  const [ambientSound, setAmbientSound] = useState<AmbientSoundType>('none');
-  const [ambientVolume, setAmbientVolume] = useState<number>(0.35);
-  const [radioVolume, setRadioVolume] = useState<number>(0.75);
-  const [currentTheme, setCurrentTheme] = useState<CalmTheme>('sage');
+function getInitialSoundtrackEnabled(): boolean {
+  if (typeof window === 'undefined') return true;
+  const saved = window.localStorage.getItem('studinty-soundtrack-enabled');
+  return saved !== null ? saved === 'true' : true;
+}
+
+function getInitialRadioVolume(): number {
+  if (typeof window === 'undefined') return 0.75;
+  const saved = window.localStorage.getItem('studinty-radio-volume');
+  const parsed = saved ? parseFloat(saved) : 0.75;
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.75;
+}
+
+function getInitialAmbientSound(): AmbientSoundType {
+  if (typeof window === 'undefined') return 'none';
+  const saved = window.localStorage.getItem('studinty-ambient-sound') as AmbientSoundType;
+  if (['none', 'rain', 'fireplace', 'cafe', 'waves', 'whitenoise'].includes(saved)) return saved;
+  return 'none';
+}
+
+function getInitialAmbientVolume(): number {
+  if (typeof window === 'undefined') return 0.35;
+  const saved = window.localStorage.getItem('studinty-ambient-volume');
+  const parsed = saved ? parseFloat(saved) : 0.35;
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.35;
+}
+
+export function App() {
+  const [radios, setRadios] = useState<RadioStation[]>([]);
+  const [currentStationId, setCurrentStationId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return window.localStorage.getItem('studinty-station-id');
+  });
+
+  const [soundtrackEnabled, setSoundtrackEnabled] = useState<boolean>(getInitialSoundtrackEnabled);
+  const [radioVolume, setRadioVolume] = useState<number>(getInitialRadioVolume);
+  const [ambientSound, setAmbientSound] = useState<AmbientSoundType>(getInitialAmbientSound);
+  const [ambientVolume, setAmbientVolume] = useState<number>(getInitialAmbientVolume);
+
+  const [currentTheme, setCurrentTheme] = useState<CalmTheme>(getInitialTheme);
   const [colorMode, setColorMode] = useState<ColorMode>(getInitialColorMode);
 
   const [sessions, setSessions] = useState<StudySession[]>([]);
@@ -52,12 +85,9 @@ export function App() {
   });
 
   const [activeTab, setActiveTab] = useState<'timer' | 'sessions' | 'history'>('timer');
-  const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
-  const [editingRoom, setEditingRoom] = useState<Room | null>(null);
-  const [isRadioModalOpen, setIsRadioModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isZenModeOpen, setIsZenModeOpen] = useState(false);
 
-  const activeRoom = rooms.find((r) => r.id === activeRoomId) || rooms[0] || null;
   const activeStation = radios.find((s) => s.id === currentStationId) || radios[0];
 
   const refreshSessionsAndStats = useCallback(async () => {
@@ -91,10 +121,6 @@ export function App() {
     skipPhase,
     configureCustomTimer,
   } = useStudyTimer({
-    initialWorkMinutes: activeRoom?.timer_work_minutes ?? 25,
-    initialBreakMinutes: activeRoom?.timer_break_minutes ?? 5,
-    initialBreaksEnabled: activeRoom ? Boolean(activeRoom.breaks_enabled) : true,
-    activeRoomId,
     onSessionSaved: refreshSessionsAndStats,
   });
 
@@ -104,58 +130,61 @@ export function App() {
     html.setAttribute('data-theme', currentTheme);
     html.classList.toggle('dark', colorMode === 'dark');
     window.localStorage.setItem('studinty-color-mode', colorMode);
+    window.localStorage.setItem('studinty-theme', currentTheme);
   }, [currentTheme, colorMode]);
 
-  const applyRoomVibe = useCallback(
-    (room: Room, options: { fromUserGesture: boolean } = { fromUserGesture: false }) => {
-      setActiveRoomId(room.id);
-      setCurrentTheme(room.theme);
-      setAmbientVolume(room.ambient_volume);
-      setRadioVolume(room.radio_volume);
+  // Persist soundtrackEnabled
+  useEffect(() => {
+    window.localStorage.setItem('studinty-soundtrack-enabled', String(soundtrackEnabled));
+  }, [soundtrackEnabled]);
 
-      if (room.default_radio_id) {
-        setCurrentStationId(room.default_radio_id);
-      }
+  const handleToggleSoundtrack = (enabled: boolean) => {
+    setSoundtrackEnabled(enabled);
+  };
 
-      if (options.fromUserGesture) {
-        setAmbientSound(room.ambient_sound);
-        if (room.ambient_sound !== 'none' && room.ambient_volume > 0) {
-          sound.startAmbient(room.ambient_sound, room.ambient_volume);
-        } else {
-          sound.stopAmbient();
-        }
-      } else {
-        // Avoid auto-starting WebAudio before a user gesture
-        setAmbientSound('none');
-      }
-    },
-    []
-  );
+  const handleSelectStation = (stationId: string) => {
+    setCurrentStationId(stationId);
+    window.localStorage.setItem('studinty-station-id', stationId);
+  };
 
-  // Initial load from SQLite API
+  const handleRadioVolumeChange = (vol: number) => {
+    setRadioVolume(vol);
+    window.localStorage.setItem('studinty-radio-volume', String(vol));
+  };
+
+  const handleAmbientSoundChange = (soundType: AmbientSoundType) => {
+    setAmbientSound(soundType);
+    window.localStorage.setItem('studinty-ambient-sound', soundType);
+  };
+
+  const handleAmbientVolumeChange = (vol: number) => {
+    setAmbientVolume(vol);
+    window.localStorage.setItem('studinty-ambient-volume', String(vol));
+  };
+
+  // Initial data load from API
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const [fetchedRooms, fetchedRadios, fetchedSessions, fetchedHistory, fetchedStats] =
+        const [fetchedRadios, fetchedSessions, fetchedHistory, fetchedStats] =
           await Promise.all([
-            api.getRooms(),
             api.getRadios(),
             api.getSessions(),
             api.getHistory(),
             api.getStats(),
           ]);
         if (!mounted) return;
-        setRooms(fetchedRooms);
         setRadios(fetchedRadios);
         setSessions(fetchedSessions);
         setPlayHistory(fetchedHistory);
         setStats(fetchedStats);
 
-        if (fetchedRooms.length > 0) {
-          applyRoomVibe(fetchedRooms[0], { fromUserGesture: false });
-        } else if (fetchedRadios.length > 0) {
-          setCurrentStationId(fetchedRadios[0].id);
+        if (fetchedRadios.length > 0) {
+          if (!currentStationId || !fetchedRadios.some((s) => s.id === currentStationId)) {
+            setCurrentStationId(fetchedRadios[0].id);
+            window.localStorage.setItem('studinty-station-id', fetchedRadios[0].id);
+          }
         }
       } catch (err) {
         console.error('Error loading initial data:', err);
@@ -165,7 +194,7 @@ export function App() {
     return () => {
       mounted = false;
     };
-  }, [applyRoomVibe]);
+  }, []);
 
   const handleSelectTab = (tab: 'timer' | 'sessions' | 'history') => {
     setActiveTab(tab);
@@ -173,52 +202,6 @@ export function App() {
       refreshHistory();
     } else if (tab === 'sessions') {
       refreshSessionsAndStats();
-    }
-  };
-
-  const handleSelectRoom = (roomId: string) => {
-    const room = rooms.find((r) => r.id === roomId);
-    if (room) {
-      applyRoomVibe(room, { fromUserGesture: true });
-    }
-  };
-
-  const handleSaveRoom = async (roomData: Partial<Room>) => {
-    if (editingRoom) {
-      const updated = await api.updateRoom(editingRoom.id, roomData);
-      setRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-      if (activeRoomId === updated.id) {
-        applyRoomVibe(updated, { fromUserGesture: true });
-      }
-    } else {
-      const created = await api.createRoom(roomData as Room);
-      setRooms((prev) => [...prev, created]);
-      applyRoomVibe(created, { fromUserGesture: true });
-    }
-    setEditingRoom(null);
-  };
-
-  const handleSaveTimerToActiveRoom = async () => {
-    if (!activeRoom) return;
-    try {
-      const updated = await api.updateRoom(activeRoom.id, {
-        timer_work_minutes: timerState.workMinutes,
-        timer_break_minutes: timerState.breaksEnabled ? timerState.breakMinutes : 0,
-        breaks_enabled: timerState.breaksEnabled ? 1 : 0,
-        timer_mode: timerState.breaksEnabled ? 'pomodoro' : 'continuous',
-      });
-      setRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-    } catch (err) {
-      console.error('Could not save timer settings to room:', err);
-    }
-  };
-
-  const handleDeleteRoom = async (roomId: string) => {
-    await api.deleteRoom(roomId);
-    const remaining = rooms.filter((r) => r.id !== roomId);
-    setRooms(remaining);
-    if (activeRoomId === roomId && remaining.length > 0) {
-      applyRoomVibe(remaining[0], { fromUserGesture: true });
     }
   };
 
@@ -231,7 +214,7 @@ export function App() {
   }) => {
     const newRadio = await api.createRadio(data);
     setRadios((prev) => [...prev, newRadio]);
-    setCurrentStationId(newRadio.id);
+    handleSelectStation(newRadio.id);
   };
 
   const handleDeleteRadio = async (stationId: string) => {
@@ -239,23 +222,19 @@ export function App() {
     const remaining = radios.filter((s) => s.id !== stationId);
     setRadios(remaining);
     if (currentStationId === stationId && remaining.length > 0) {
-      setCurrentStationId(remaining[0].id);
+      handleSelectStation(remaining[0].id);
     }
   };
 
-  const hasUnsavedRoomChanges = Boolean(
-    activeRoom &&
-      (timerState.workMinutes !== activeRoom.timer_work_minutes ||
-        timerState.breaksEnabled !== Boolean(activeRoom.breaks_enabled) ||
-        (timerState.breaksEnabled && timerState.breakMinutes !== activeRoom.timer_break_minutes))
-  );
-
   const isSessionDimmed = activeTab === 'timer' && timerState.isRunning;
+
+  // Soundtrack playback is strictly synced to timer running AND soundtrack toggle
+  const isSoundtrackPlaying = timerState.isRunning && soundtrackEnabled;
 
   return (
     <div
       data-focus-active={isSessionDimmed ? 'true' : 'false'}
-      className="min-h-screen flex flex-col font-sans bg-[var(--bg-canvas)] text-[var(--text-main)] transition-colors duration-500"
+      className="h-screen max-h-screen flex flex-col font-sans bg-[var(--bg-canvas)] text-[var(--text-main)] transition-colors duration-500 overflow-hidden"
     >
       <Header
         currentTheme={currentTheme}
@@ -265,92 +244,117 @@ export function App() {
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
         onEnterZenMode={() => setIsZenModeOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         stats={stats}
       />
 
-      <main className="flex-1 max-w-3xl w-full mx-auto px-5 pb-12 flex flex-col">
-        {/* Seamless Room Strip */}
-        <div className="pb-4 border-b border-[var(--border-hairline)]">
-          <RoomBar
-            rooms={rooms}
-            activeRoomId={activeRoomId}
-            onSelectRoom={handleSelectRoom}
-            onOpenCreateModal={() => {
-              setEditingRoom(null);
-              setIsRoomModalOpen(true);
-            }}
-            onOpenEditModal={() => {
-              setEditingRoom(activeRoom || null);
-              setIsRoomModalOpen(true);
-            }}
+      {/* Main viewport area - Non-scrollable when fitting, smooth internal scroll if needed */}
+      <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-5 flex flex-col justify-between min-h-0 overflow-y-auto overflow-x-hidden">
+        {/* Tab 1: Centerpiece Focus Timer and Apple Style Control Widgets */}
+        <div
+          className={`w-full flex-1 flex flex-col justify-center items-center py-2 sm:py-3 my-auto ${
+            activeTab === 'timer' ? 'flex' : 'hidden'
+          }`}
+        >
+          <Timer
+            timerState={timerState}
+            sessionGoal={sessionGoal}
+            onSessionGoalChange={setSessionGoal}
+            onToggleTimer={toggleTimer}
+            onResetTimer={resetTimer}
+            onSkipPhase={skipPhase}
+            soundtrackEnabled={soundtrackEnabled}
+            onToggleSoundtrack={handleToggleSoundtrack}
+            activeStationName={activeStation?.name}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+          />
+
+          {/* Apple Style Expandable Interactive Widgets */}
+          <AppleWidgetsShelf
+            timerState={timerState}
+            onConfigureTimer={configureCustomTimer}
+            stations={radios}
+            currentStationId={currentStationId}
+            onSelectStation={handleSelectStation}
+            isPlaying={isSoundtrackPlaying}
+            soundtrackEnabled={soundtrackEnabled}
+            onToggleSoundtrack={handleToggleSoundtrack}
+            radioVolume={radioVolume}
+            onRadioVolumeChange={handleRadioVolumeChange}
+            onAddStation={handleAddRadio}
+            ambientSound={ambientSound}
+            ambientVolume={ambientVolume}
+            onAmbientSoundChange={handleAmbientSoundChange}
+            onAmbientVolumeChange={handleAmbientVolumeChange}
+            currentTheme={currentTheme}
+            onSelectTheme={setCurrentTheme}
+            colorMode={colorMode}
+            onToggleColorMode={() => setColorMode((m) => (m === 'dark' ? 'light' : 'dark'))}
           />
         </div>
 
-        {activeTab === 'timer' && (
-          <div className="flex-1 flex flex-col justify-between gap-8 pt-4">
-            {/* Centerpiece Focus Timer — stays undimmed while everything else dims */}
-            <Timer
-              timerState={timerState}
-              sessionGoal={sessionGoal}
-              onSessionGoalChange={setSessionGoal}
-              onToggleTimer={toggleTimer}
-              onResetTimer={resetTimer}
-              onSkipPhase={skipPhase}
-              onConfigureTimer={configureCustomTimer}
-              hasUnsavedRoomChanges={hasUnsavedRoomChanges}
-              onSaveTimerToRoom={handleSaveTimerToActiveRoom}
-            />
+        {/* Tab 2: Sessions view (internal scroll for list) */}
+        <div
+          className={`h-full overflow-y-auto py-4 ${
+            activeTab === 'sessions' ? 'block' : 'hidden'
+          }`}
+        >
+          <SessionsView sessions={sessions} stats={stats} />
+        </div>
 
-            {/* Blended Soundscape Strip — dims smoothly during active session */}
-            <div className="focus-dimmable pt-7 border-t border-[var(--border-hairline)] grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10">
-              <RadioPlayer
-                stations={radios}
-                currentStationId={currentStationId}
-                onSelectStation={setCurrentStationId}
-                onOpenAddModal={() => setIsRadioModalOpen(true)}
-                onDeleteStation={handleDeleteRadio}
-                radioVolume={radioVolume}
-                onVolumeChange={setRadioVolume}
-                activeRoomId={activeRoomId}
-                onHistoryUpdated={refreshHistory}
-              />
-
-              <AmbientMixer
-                ambientSound={ambientSound}
-                ambientVolume={ambientVolume}
-                onSoundChange={setAmbientSound}
-                onVolumeChange={setAmbientVolume}
-              />
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'sessions' && (
-          <SessionsView sessions={sessions} stats={stats} rooms={rooms} />
-        )}
-
-        {activeTab === 'history' && (
-          <HistoryView history={playHistory} rooms={rooms} />
-        )}
+        {/* Tab 3: Plays history view (internal scroll for list) */}
+        <div
+          className={`h-full overflow-y-auto py-4 ${
+            activeTab === 'history' ? 'block' : 'hidden'
+          }`}
+        >
+          <HistoryView history={playHistory} />
+        </div>
       </main>
 
-      <footer className="focus-dimmable py-5 text-center text-[11px] text-[var(--text-faint)]">
-        <span>studinty · local sqlite sanctuary</span>
+      <footer className="focus-dimmable py-3 text-center shrink-0">
+        <p className="text-[11px] text-[var(--text-faint)] max-w-md mx-auto mb-2 px-4 leading-relaxed font-light">
+          &ldquo;Everything has become fast, distracting, and overwhelming, and the only way to focus these days is to turn the noise down. Achive more, do less.&rdquo;
+        </p>
+        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[var(--ink-wash)] border border-[var(--border-hairline)] text-xs text-[var(--text-muted)] transition-colors shadow-sm">
+          <span className="font-medium tracking-wide">Just Study</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-main)] opacity-75" />
+          <span className="font-semibold tracking-wider uppercase text-[11px] text-[var(--accent-main)]">By RASHID</span>
+        </div>
       </footer>
 
-      <RoomModal
-        isOpen={isRoomModalOpen}
-        onClose={() => setIsRoomModalOpen(false)}
-        onSave={handleSaveRoom}
-        onDelete={editingRoom && rooms.length > 1 ? handleDeleteRoom : undefined}
-        editingRoom={editingRoom}
-        radios={radios}
+      {/* Persistent Audio Soundtrack Engine - NEVER unmounted across tabs */}
+      <SoundtrackEngine
+        stations={radios}
+        currentStationId={currentStationId}
+        isPlaying={isSoundtrackPlaying}
+        radioVolume={radioVolume}
+        ambientSound={ambientSound}
+        ambientVolume={ambientVolume}
+        onHistoryUpdated={refreshHistory}
       />
 
-      <RadioModal
-        isOpen={isRadioModalOpen}
-        onClose={() => setIsRadioModalOpen(false)}
-        onAddRadio={handleAddRadio}
+      {/* Settings Modal (Timer, Color Palettes, Soundtrack, Ambient) */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        timerState={timerState}
+        onConfigureTimer={configureCustomTimer}
+        stations={radios}
+        currentStationId={currentStationId}
+        onSelectStation={handleSelectStation}
+        radioVolume={radioVolume}
+        onRadioVolumeChange={handleRadioVolumeChange}
+        onAddStation={handleAddRadio}
+        onDeleteStation={handleDeleteRadio}
+        ambientSound={ambientSound}
+        ambientVolume={ambientVolume}
+        onAmbientSoundChange={handleAmbientSoundChange}
+        onAmbientVolumeChange={handleAmbientVolumeChange}
+        currentTheme={currentTheme}
+        onSelectTheme={setCurrentTheme}
+        colorMode={colorMode}
+        onToggleColorMode={() => setColorMode((m) => (m === 'dark' ? 'light' : 'dark'))}
       />
 
       <ZenMode

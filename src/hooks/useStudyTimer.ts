@@ -4,57 +4,146 @@ import { sound } from '../utils/sound.js';
 import { api } from '../services/api.js';
 
 interface UseStudyTimerOptions {
-  initialWorkMinutes: number;
-  initialBreakMinutes: number;
-  initialBreaksEnabled: boolean;
-  activeRoomId: string | null;
+  initialWorkMinutes?: number;
+  initialBreakMinutes?: number;
+  initialBreaksEnabled?: boolean;
   onSessionSaved?: () => void;
 }
 
+const STORAGE_KEY = 'studinty_persisted_timer_v4';
+
+interface PersistedTimerState {
+  workMinutes: number;
+  breakMinutes: number;
+  breaksEnabled: boolean;
+  phase: 'work' | 'break';
+  remainingSeconds: number;
+  totalDurationSeconds: number;
+  isRunning: boolean;
+  completedCycles: number;
+  sessionGoal: string;
+  sessionStartedAt: string | null;
+  savedAt: number;
+}
+
+function loadPersistedState(defaultWork = 25, defaultBreak = 5, defaultBreaksEnabled = true) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (typeof data.remainingSeconds === 'number' && typeof data.totalDurationSeconds === 'number') {
+          const workMinutes = clampMinutes(data.workMinutes, 1, 240, defaultWork);
+          const breaksEnabled = data.breaksEnabled ?? defaultBreaksEnabled;
+          const breakMinutes = breaksEnabled
+            ? clampMinutes(data.breakMinutes, 1, 90, defaultBreak)
+            : clampMinutes(data.breakMinutes, 0, 90, 0);
+
+          return {
+            timerState: {
+              phase: data.phase === 'break' ? ('break' as const) : ('work' as const),
+              remainingSeconds: Math.max(0, data.remainingSeconds),
+              totalDurationSeconds: Math.max(1, data.totalDurationSeconds),
+              isRunning: Boolean(data.isRunning),
+              completedCycles: typeof data.completedCycles === 'number' ? data.completedCycles : 0,
+              breaksEnabled,
+              workMinutes,
+              breakMinutes,
+            },
+            sessionGoal: typeof data.sessionGoal === 'string' ? data.sessionGoal : '',
+            sessionStartedAt: (data.sessionStartedAt as string | null) || null,
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Could not load persisted timer state:', err);
+  }
+
+  const initial = createInitialTimerState({
+    workMinutes: defaultWork,
+    breakMinutes: defaultBreak,
+    breaksEnabled: defaultBreaksEnabled,
+  });
+
+  return {
+    timerState: initial,
+    sessionGoal: '',
+    sessionStartedAt: null,
+  };
+}
+
+function savePersistedState(state: TimerState, goal: string, sessionStartedAt: string | null) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const payload: PersistedTimerState = {
+        workMinutes: state.workMinutes,
+        breakMinutes: state.breakMinutes,
+        breaksEnabled: state.breaksEnabled,
+        phase: state.phase,
+        remainingSeconds: state.remainingSeconds,
+        totalDurationSeconds: state.totalDurationSeconds,
+        isRunning: state.isRunning,
+        completedCycles: state.completedCycles,
+        sessionGoal: goal,
+        sessionStartedAt,
+        savedAt: Date.now(),
+      };
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    }
+  } catch (err) {
+    console.warn('Could not save persisted timer state:', err);
+  }
+}
+
 export function useStudyTimer({
-  initialWorkMinutes,
-  initialBreakMinutes,
-  initialBreaksEnabled,
-  activeRoomId,
+  initialWorkMinutes = 25,
+  initialBreakMinutes = 5,
+  initialBreaksEnabled = true,
   onSessionSaved,
-}: UseStudyTimerOptions) {
-  const [timerState, setTimerState] = useState<TimerState>(() =>
-    createInitialTimerState({
-      workMinutes: initialWorkMinutes,
-      breakMinutes: initialBreakMinutes,
-      breaksEnabled: initialBreaksEnabled,
-    })
+}: UseStudyTimerOptions = {}) {
+  const [initialData] = useState(() =>
+    loadPersistedState(initialWorkMinutes, initialBreakMinutes, initialBreaksEnabled)
   );
-  const [sessionGoal, setSessionGoal] = useState<string>('');
-  const sessionStartRef = useRef<string | null>(null);
+
+  const [timerState, setTimerState] = useState<TimerState>(initialData.timerState);
+  const [sessionGoal, setSessionGoalInternal] = useState<string>(initialData.sessionGoal);
+
+  const sessionStartRef = useRef<string | null>(initialData.sessionStartedAt);
   const stateRef = useRef<TimerState>(timerState);
   stateRef.current = timerState;
 
   const goalRef = useRef(sessionGoal);
   goalRef.current = sessionGoal;
 
-  const roomIdRef = useRef(activeRoomId);
-  roomIdRef.current = activeRoomId;
-
   const onSessionSavedRef = useRef(onSessionSaved);
   onSessionSavedRef.current = onSessionSaved;
 
-  // Sync when room changes (only if timer isn't actively counting down)
-  useEffect(() => {
-    setTimerState((prev) => {
-      if (prev.isRunning) return prev;
-      return createInitialTimerState({
-        workMinutes: initialWorkMinutes,
-        breakMinutes: initialBreakMinutes,
-        breaksEnabled: initialBreaksEnabled,
-      });
-    });
-    sessionStartRef.current = null;
-  }, [activeRoomId, initialWorkMinutes, initialBreakMinutes, initialBreaksEnabled]);
+  const setSessionGoal = useCallback((newGoal: string) => {
+    setSessionGoalInternal(newGoal);
+    goalRef.current = newGoal;
+    savePersistedState(stateRef.current, newGoal, sessionStartRef.current);
+  }, []);
 
-  // StrictMode-safe 1-second interval: side effects happen outside state updater
+  // Save state on unload/beforeunload so page reload captures exact moment
   useEffect(() => {
-    if (!timerState.isRunning) return;
+    const handleBeforeUnload = () => {
+      savePersistedState(stateRef.current, goalRef.current, sessionStartRef.current);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+    };
+  }, []);
+
+  // StrictMode-safe 1-second interval
+  useEffect(() => {
+    if (!timerState.isRunning) {
+      savePersistedState(timerState, goalRef.current, sessionStartRef.current);
+      return;
+    }
 
     const interval = window.setInterval(() => {
       const current = stateRef.current;
@@ -64,9 +153,10 @@ export function useStudyTimer({
       const { nextState, didCompletePhase, completedWorkPhase } = tickTimer(current);
 
       setTimerState(nextState);
+      savePersistedState(nextState, goalRef.current, sessionStartRef.current);
 
       if (didCompletePhase) {
-        sound.playChime();
+        sound.playTimerEnd();
 
         if (completedWorkPhase) {
           const endIso = new Date().toISOString();
@@ -77,7 +167,7 @@ export function useStudyTimer({
 
           api
             .createSession({
-              room_id: roomIdRef.current,
+              room_id: null,
               title: goalRef.current.trim() || 'Focused Study Session',
               category: 'Study',
               target_duration_seconds: completedDuration,
@@ -103,10 +193,15 @@ export function useStudyTimer({
   const toggleTimer = useCallback(() => {
     setTimerState((prev) => {
       const nextRunning = !prev.isRunning;
-      if (nextRunning && prev.phase === 'work' && !sessionStartRef.current) {
-        sessionStartRef.current = new Date().toISOString();
+      if (nextRunning) {
+        sound.playTimerStart();
+        if (prev.phase === 'work' && !sessionStartRef.current) {
+          sessionStartRef.current = new Date().toISOString();
+        }
       }
-      return { ...prev, isRunning: nextRunning };
+      const updated = { ...prev, isRunning: nextRunning };
+      savePersistedState(updated, goalRef.current, sessionStartRef.current);
+      return updated;
     });
   }, []);
 
@@ -117,12 +212,14 @@ export function useStudyTimer({
         prev.phase === 'work'
           ? Math.max(1, prev.workMinutes) * 60
           : Math.max(1, prev.breakMinutes || 5) * 60;
-      return {
+      const updated = {
         ...prev,
         isRunning: false,
         totalDurationSeconds: dur,
         remainingSeconds: dur,
       };
+      savePersistedState(updated, goalRef.current, null);
+      return updated;
     });
   }, []);
 
@@ -131,26 +228,30 @@ export function useStudyTimer({
     setTimerState((prev) => {
       if (!prev.breaksEnabled) {
         const dur = Math.max(1, prev.workMinutes) * 60;
-        return {
+        const updated: TimerState = {
           ...prev,
           phase: 'work',
           isRunning: false,
           totalDurationSeconds: dur,
           remainingSeconds: dur,
         };
+        savePersistedState(updated, goalRef.current, null);
+        return updated;
       }
       const nextPhase = prev.phase === 'work' ? 'break' : 'work';
       const dur =
         nextPhase === 'work'
           ? Math.max(1, prev.workMinutes) * 60
           : Math.max(1, prev.breakMinutes || 5) * 60;
-      return {
+      const updated: TimerState = {
         ...prev,
         phase: nextPhase,
         isRunning: false,
         totalDurationSeconds: dur,
         remainingSeconds: dur,
       };
+      savePersistedState(updated, goalRef.current, null);
+      return updated;
     });
   }, []);
 
@@ -177,7 +278,7 @@ export function useStudyTimer({
         const nextPhase = !nextBreaksEnabled ? 'work' : prev.phase;
         const dur = (nextPhase === 'work' ? nextWork : Math.max(1, nextBreak)) * 60;
 
-        return {
+        const updated: TimerState = {
           ...prev,
           phase: nextPhase,
           isRunning: false,
@@ -187,6 +288,8 @@ export function useStudyTimer({
           totalDurationSeconds: dur,
           remainingSeconds: dur,
         };
+        savePersistedState(updated, goalRef.current, null);
+        return updated;
       });
     },
     []

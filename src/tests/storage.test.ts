@@ -16,9 +16,8 @@ describe('LocalStudyStorage Client Storage Engine', () => {
     expect(rooms.some((r) => r.id === 'room-midnight-lofi')).toBe(true);
 
     const radios = storage.getRadios();
-    expect(radios.length).toBeGreaterThanOrEqual(5);
+    expect(radios.length).toBeGreaterThanOrEqual(1);
     expect(radios.some((r) => r.stream_type === 'youtube')).toBe(true);
-    expect(radios.some((r) => r.stream_type === 'audio')).toBe(true);
   });
 
   describe('Rooms Management', () => {
