@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Loader2 } from 'lucide-react';
 import { CalmDialog } from './ui.js';
 import { extractYouTubeId, isYouTubeUrl } from '../utils/youtube.js';
+import { extractSpotifyUri, isSpotifyUrl } from '../utils/spotify.js';
 import { youtubeAudio } from '../utils/youtubePlayer.js';
+import { spotifyAudio } from '../utils/spotifyPlayer.js';
 import { api } from '../services/api.js';
 
 interface Props {
@@ -29,8 +31,9 @@ export const RadioModal: React.FC<Props> = ({ isOpen, onClose, onAddRadio }) => 
   const testAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const detectedYouTubeId = extractYouTubeId(url);
+  const detectedSpotifyUri = extractSpotifyUri(url);
 
-  // Auto-fetch YouTube video / live stream title when pasting a YouTube link
+  // Auto-fetch YouTube metadata when pasting a YouTube link
   useEffect(() => {
     if (!detectedYouTubeId || !isOpen) return;
     let cancelled = false;
@@ -46,7 +49,7 @@ export const RadioModal: React.FC<Props> = ({ isOpen, onClose, onAddRadio }) => 
         );
       })
       .catch(() => {
-        // Ignore oembed error quietly
+        // If errored just leave it as it is
       })
       .finally(() => {
         if (!cancelled) setIsFetchingMeta(false);
@@ -58,6 +61,82 @@ export const RadioModal: React.FC<Props> = ({ isOpen, onClose, onAddRadio }) => 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detectedYouTubeId, isOpen]);
 
+  // Auto-fetch Spotify metadata when pasting a Spotify link
+  useEffect(() => {
+    if (!detectedSpotifyUri || !isOpen) return;
+    let cancelled = false;
+    setIsFetchingMeta(true);
+
+    api
+      .getSpotifyMeta(url)
+      .then((meta) => {
+        if (cancelled) return;
+        setName((prev) => (prev.trim() === '' ? meta.title : prev));
+        setDescription((prev) =>
+          prev.trim() === '' && meta.author ? `Spotify · ${meta.author}` : prev
+        );
+        setGenre((prev) => (prev === 'lofi' ? 'spotify' : prev));
+      })
+      .catch(() => {
+        // Ignore quietly
+      })
+      .finally(() => {
+        if (!cancelled) setIsFetchingMeta(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detectedSpotifyUri, isOpen]);
+
+  const handleNamePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text').trim();
+    if (isYouTubeUrl(text) || extractYouTubeId(text)) {
+      if (!url.trim()) {
+        setUrl(text);
+      }
+      setIsFetchingMeta(true);
+      api
+        .getYouTubeMeta(text)
+        .then((meta) => {
+          if (meta?.title) {
+            setName(meta.title);
+          }
+        })
+        .catch(() => {
+          // If errored just leave it as it is
+        })
+        .finally(() => {
+          setIsFetchingMeta(false);
+        });
+    }
+  };
+
+  const handleNameChange = (val: string) => {
+    setName(val);
+    const trimmed = val.trim();
+    if (isYouTubeUrl(trimmed) || extractYouTubeId(trimmed)) {
+      if (!url.trim()) {
+        setUrl(trimmed);
+      }
+      setIsFetchingMeta(true);
+      api
+        .getYouTubeMeta(trimmed)
+        .then((meta) => {
+          if (meta?.title) {
+            setName(meta.title);
+          }
+        })
+        .catch(() => {
+          // If errored just leave it as it is
+        })
+        .finally(() => {
+          setIsFetchingMeta(false);
+        });
+    }
+  };
+
   const stopTestPlayback = () => {
     if (testAudioRef.current) {
       testAudioRef.current.pause();
@@ -65,6 +144,7 @@ export const RadioModal: React.FC<Props> = ({ isOpen, onClose, onAddRadio }) => 
     }
     if (isTesting) {
       youtubeAudio.pause();
+      spotifyAudio.stop();
       setIsTesting(false);
     }
   };
@@ -85,6 +165,20 @@ export const RadioModal: React.FC<Props> = ({ isOpen, onClose, onAddRadio }) => 
       return;
     }
 
+    // Spotify stream test
+    if (isSpotifyUrl(trimmed)) {
+      setIsTesting(true);
+      spotifyAudio.play(trimmed, {
+        onPlaying: () => setIsTesting(true),
+        onError: (err) => {
+          setIsTesting(false);
+          setPreviewError(err || 'Could not preview Spotify audio stream.');
+        },
+      });
+      return;
+    }
+
+    // YouTube stream test
     const ytId = extractYouTubeId(trimmed);
     if (ytId) {
       setIsTesting(true);
@@ -97,47 +191,62 @@ export const RadioModal: React.FC<Props> = ({ isOpen, onClose, onAddRadio }) => 
           testAudioRef.current = audio;
           audio.play().catch(() => {
             setIsTesting(false);
-            setPreviewError('Could not preview YouTube audio stream.');
+            setPreviewError('Unable to preview audio stream in this browser.');
           });
+        },
+        onError: () => {
+          setIsTesting(false);
+          setPreviewError('Failed to load YouTube stream. It may have playback restrictions.');
         },
       });
       return;
     }
 
+    // Direct HTTP/Icecast stream
+    setIsTesting(true);
     const audio = new Audio(trimmed);
     audio.volume = 0.6;
     testAudioRef.current = audio;
-    audio
-      .play()
-      .then(() => setIsTesting(true))
-      .catch(() => {
-        setIsTesting(false);
-        setPreviewError('Could not preview stream. Check that the URL is a valid audio or YouTube link.');
-      });
+
+    audio.onplaying = () => setIsTesting(true);
+    audio.onerror = () => {
+      setIsTesting(false);
+      setPreviewError('Unable to load audio stream from this URL.');
+    };
+
+    audio.play().catch(() => {
+      setIsTesting(false);
+      setPreviewError('Could not play stream. Make sure the link is a valid direct audio or live URL.');
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !url.trim()) return;
 
-    stopTestPlayback();
-    setIsSubmitting(true);
     try {
-      const isYt = isYouTubeUrl(url.trim());
+      setIsSubmitting(true);
+      stopTestPlayback();
+
+      const isYt = isYouTubeUrl(url);
+      const isSp = isSpotifyUrl(url);
+      const stream_type = isSp ? 'spotify' : isYt ? 'youtube' : 'audio';
+
       await onAddRadio({
         name: name.trim(),
-        description: description.trim(),
+        description: description.trim() || (isSp ? 'Spotify audio' : isYt ? 'YouTube audio stream' : 'Web audio radio stream'),
         url: url.trim(),
-        genre: genre.trim() || (isYt ? 'youtube audio' : 'lofi'),
-        stream_type: isYt ? 'youtube' : 'audio',
+        genre: genre.trim() || (isSp ? 'spotify' : isYt ? 'youtube audio' : 'lofi'),
+        stream_type,
       });
+
+      handleClose();
       setName('');
-      setDescription('');
       setUrl('');
-      setPreviewError(null);
-      onClose();
-    } catch (err) {
-      console.error('Failed to add radio:', err);
+      setDescription('');
+      setGenre('lofi');
+    } catch (err: any) {
+      setPreviewError(err.message || 'Failed to save radio station');
     } finally {
       setIsSubmitting(false);
     }
@@ -150,30 +259,35 @@ export const RadioModal: React.FC<Props> = ({ isOpen, onClose, onAddRadio }) => 
         if (!open) handleClose();
       }}
       title="Add Focus Audio Stream"
-      description="Paste any YouTube video, 24/7 YouTube live radio, or Icecast/MP3 stream URL. Videos run purely as background audio."
+      description="Paste any Spotify playlist/track, YouTube video or 24/7 live radio, or Icecast/MP3 stream URL. Plays cleanly as focus audio."
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-xs text-[var(--text-muted)]">
-              YouTube or Audio Stream URL
+              Spotify, YouTube, or Audio Stream URL
             </label>
-            {detectedYouTubeId && (
+            {detectedSpotifyUri && (
               <span className="text-[10px] font-mono text-[var(--accent-main)]">
-                {isFetchingMeta ? 'Fetching title...' : 'YouTube audio stream ready'}
+                {isFetchingMeta ? 'Fetching title...' : 'Spotify stream ready'}
+              </span>
+            )}
+            {detectedYouTubeId && !detectedSpotifyUri && (
+              <span className="text-[10px] font-mono text-[var(--accent-main)]">
+                {isFetchingMeta ? 'Fetching title...' : 'YouTube stream ready'}
               </span>
             )}
           </div>
           <div className="flex gap-2">
             <input
-              type="url"
+              type="text"
               required
               value={url}
               onChange={(e) => {
                 setUrl(e.target.value);
                 setPreviewError(null);
               }}
-              placeholder="https://www.youtube.com/watch?v=... or .mp3"
+              placeholder="https://open.spotify.com/... or https://www.youtube.com/... or .mp3"
               className="flex-1 px-3 py-2 text-sm bg-[var(--ink-wash)] border border-[var(--border-hairline)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-[var(--accent-main)]"
             />
             <button
@@ -200,8 +314,9 @@ export const RadioModal: React.FC<Props> = ({ isOpen, onClose, onAddRadio }) => 
               type="text"
               required
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Lofi Girl Study Session, Rainy Piano Mix"
+              onChange={(e) => handleNameChange(e.target.value)}
+              onPaste={handleNamePaste}
+              placeholder="e.g. Deep Focus Spotify Mix, Lofi Study Session"
               className="w-full px-3 py-2 text-sm bg-[var(--ink-wash)] border border-[var(--border-hairline)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-[var(--accent-main)]"
             />
             {isFetchingMeta && (
@@ -219,38 +334,39 @@ export const RadioModal: React.FC<Props> = ({ isOpen, onClose, onAddRadio }) => 
               type="text"
               value={genre}
               onChange={(e) => setGenre(e.target.value)}
-              placeholder="lofi, piano, ambient"
-              className="w-full px-3 py-2 text-sm bg-[var(--ink-wash)] border border-[var(--border-hairline)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-[var(--accent-main)]"
+              placeholder="e.g. spotify, lofi, ambient"
+              className="w-full px-3 py-2 text-sm bg-[var(--ink-wash)] border border-[var(--border-hairline)] rounded-xl text-[var(--text-main)] focus:outline-none focus:border-[var(--accent-main)]"
             />
           </div>
+
           <div>
             <label className="block text-xs text-[var(--text-muted)] mb-1.5">
-              Short Note
+              Description (Optional)
             </label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Calm evening study"
-              className="w-full px-3 py-2 text-sm bg-[var(--ink-wash)] border border-[var(--border-hairline)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-[var(--accent-main)]"
+              placeholder="e.g. Soothing instrumental study tracks"
+              className="w-full px-3 py-2 text-sm bg-[var(--ink-wash)] border border-[var(--border-hairline)] rounded-xl text-[var(--text-main)] focus:outline-none focus:border-[var(--accent-main)]"
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-hairline)]">
+        <div className="flex justify-end gap-2.5 pt-3 border-t border-[var(--border-hairline)]">
           <button
             type="button"
             onClick={handleClose}
-            className="px-4 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] rounded-full transition-colors"
+            className="px-4 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSubmitting || !name.trim() || !url.trim()}
-            className="px-5 py-2 text-xs font-medium text-[var(--accent-fg)] bg-[var(--accent-main)] hover:bg-[var(--accent-hover)] rounded-full transition-colors disabled:opacity-50"
+            className="px-5 py-2 text-sm rounded-xl bg-[var(--accent-main)] text-[var(--accent-fg)] font-medium hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors shadow-sm"
           >
-            {isSubmitting ? 'Saving...' : 'Save Stream'}
+            {isSubmitting ? 'Adding...' : 'Add Audio Stream'}
           </button>
         </div>
       </form>

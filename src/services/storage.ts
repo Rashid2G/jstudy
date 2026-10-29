@@ -5,8 +5,10 @@ import {
   PlayHistoryItem,
   DashboardStats,
   YouTubeMetadata,
+  SpotifyMetadata,
 } from '../types/index.js';
 import { detectStreamType, extractYouTubeId, normalizeYouTubeUrl } from '../utils/youtube.js';
+import { extractSpotifyUri, normalizeSpotifyUrl } from '../utils/spotify.js';
 
 const STORAGE_KEYS = {
   ROOMS: 'studinty_rooms_v2',
@@ -54,10 +56,10 @@ function getSafeStorage(): Storage {
 
 export const defaultCuratedRadios: Omit<RadioStation, 'created_at'>[] = [
   {
-    id: 'radio-yt-halloween',
-    name: '24/7 Halloween Ambience — Spooky Lofi',
-    description: '24/7 halloween ambience 🎃 spooky lofi to get chills to (Lofi Girl).',
-    url: 'https://music.youtube.com/watch?v=0sfDth4lMLc&si=yaLbbTtZ0JMfjpR3',
+    id: 'radio-yt-lofigirl',
+    name: 'lofi hip hop radio 📚 beats to relax/study to',
+    description: 'lofi hip hop radio 📚 beats to relax/study to (Lofi Girl).',
+    url: 'https://www.youtube.com/watch?v=rFZHOHl-L8A',
     stream_type: 'youtube',
     genre: 'lofi live',
     is_curated: 1,
@@ -74,7 +76,7 @@ export const defaultStarterRooms: Omit<Room, 'created_at' | 'updated_at'>[] = [
     timer_break_minutes: 10,
     breaks_enabled: 1,
     timer_mode: 'pomodoro',
-    default_radio_id: 'radio-yt-halloween',
+    default_radio_id: 'radio-yt-lofigirl',
     ambient_sound: 'rain',
     ambient_volume: 0.35,
     radio_volume: 0.7,
@@ -88,7 +90,7 @@ export const defaultStarterRooms: Omit<Room, 'created_at' | 'updated_at'>[] = [
     timer_break_minutes: 5,
     breaks_enabled: 1,
     timer_mode: 'pomodoro',
-    default_radio_id: 'radio-yt-halloween',
+    default_radio_id: 'radio-yt-lofigirl',
     ambient_sound: 'fireplace',
     ambient_volume: 0.3,
     radio_volume: 0.7,
@@ -102,7 +104,7 @@ export const defaultStarterRooms: Omit<Room, 'created_at' | 'updated_at'>[] = [
     timer_break_minutes: 0,
     breaks_enabled: 0,
     timer_mode: 'continuous',
-    default_radio_id: 'radio-yt-halloween',
+    default_radio_id: 'radio-yt-lofigirl',
     ambient_sound: 'cafe',
     ambient_volume: 0.35,
     radio_volume: 0.75,
@@ -116,7 +118,7 @@ export const defaultStarterRooms: Omit<Room, 'created_at' | 'updated_at'>[] = [
     timer_break_minutes: 10,
     breaks_enabled: 1,
     timer_mode: 'custom',
-    default_radio_id: 'radio-yt-halloween',
+    default_radio_id: 'radio-yt-lofigirl',
     ambient_sound: 'waves',
     ambient_volume: 0.25,
     radio_volume: 0.7,
@@ -159,11 +161,26 @@ export class LocalStudyStorage {
         updated_at: now,
       }));
       this.write(STORAGE_KEYS.ROOMS, seeded);
+    } else {
+      let modified = false;
+      const updatedRooms = existingRooms.map((r) => {
+        if (r.default_radio_id === 'radio-yt-halloween') {
+          modified = true;
+          return { ...r, default_radio_id: 'radio-yt-lofigirl' };
+        }
+        return r;
+      });
+      if (modified) {
+        this.write(STORAGE_KEYS.ROOMS, updatedRooms);
+      }
     }
 
     const existingRadios = this.read<RadioStation[]>(STORAGE_KEYS.RADIOS, []);
     const validRadios = existingRadios.filter(
-      (r) => r.id === 'radio-yt-halloween' || r.url.includes('0sfDth4lMLc')
+      (r) => r.id === 'radio-yt-lofigirl' || r.url.includes('rFZHOHl-L8A')
+    );
+    const customRadios = existingRadios.filter(
+      (r) => !r.is_curated && r.id !== 'radio-yt-halloween' && !r.url.includes('0sfDth4lMLc')
     );
     if (validRadios.length === 0) {
       const now = new Date().toISOString();
@@ -171,9 +188,9 @@ export class LocalStudyStorage {
         ...r,
         created_at: now,
       }));
-      this.write(STORAGE_KEYS.RADIOS, seeded);
+      this.write(STORAGE_KEYS.RADIOS, [...seeded, ...customRadios]);
     } else {
-      this.write(STORAGE_KEYS.RADIOS, validRadios);
+      this.write(STORAGE_KEYS.RADIOS, [...validRadios, ...customRadios]);
     }
   }
 
@@ -297,7 +314,12 @@ export class LocalStudyStorage {
 
     const detectedType = detectStreamType(url);
     const finalType = (data.stream_type as any) || detectedType;
-    const normalizedUrl = finalType === 'youtube' ? normalizeYouTubeUrl(url) : url;
+    const normalizedUrl =
+      finalType === 'youtube'
+        ? normalizeYouTubeUrl(url)
+        : finalType === 'spotify'
+        ? normalizeSpotifyUrl(url)
+        : url;
 
     const id = `radio-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const newStation: RadioStation = {
@@ -511,10 +533,38 @@ export class LocalStudyStorage {
       // Fallback
     }
 
+    throw new Error(`Failed to fetch YouTube title for ${videoId}`);
+  }
+
+  // --- Spotify Metadata Client Fetch ---
+  async getSpotifyMeta(url: string): Promise<SpotifyMetadata> {
+    const uri = extractSpotifyUri(url);
+    if (!uri) {
+      throw new Error('Invalid Spotify URL or URI');
+    }
+
+    try {
+      const canonical = normalizeSpotifyUrl(url);
+      const res = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(canonical)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) {
+          return {
+            uri,
+            title: data.title,
+            author: data.author_name || 'Spotify',
+            thumbnail: data.thumbnail_url,
+          };
+        }
+      }
+    } catch {
+      // Fallback
+    }
+
     return {
-      videoId,
-      title: `YouTube Audio (${videoId})`,
-      author: 'YouTube',
+      uri,
+      title: 'Spotify Audio',
+      author: 'Spotify',
     };
   }
 
