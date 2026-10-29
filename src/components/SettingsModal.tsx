@@ -4,7 +4,7 @@ import { TimerState } from '../utils/timer.js';
 import { CalmDialog, CalmSwitch, CalmSlider } from './ui.js';
 import { ThemeSelector } from './ThemeSelector.js';
 import { AmbientMixer } from './AmbientMixer.js';
-import { Minus, Plus, Music, Volume2, PlusCircle, Trash2, Clock, Palette, Loader2 } from 'lucide-react';
+import { Minus, Plus, Music, Volume2, PlusCircle, Trash2, Clock, Palette, Loader2, Repeat } from 'lucide-react';
 import { extractYouTubeId, isYouTubeUrl } from '../utils/youtube.js';
 import { api } from '../services/api.js';
 
@@ -16,6 +16,8 @@ interface Props {
     workMinutes?: number;
     breakMinutes?: number;
     breaksEnabled?: boolean;
+    loopEnabled?: boolean;
+    totalSessionMinutes?: number;
   }) => void;
   stations: RadioStation[];
   currentStationId: string | null;
@@ -79,7 +81,8 @@ export const SettingsModal: React.FC<Props> = ({
   const [isSubmittingStation, setIsSubmittingStation] = useState(false);
   const [isFetchingMeta, setIsFetchingMeta] = useState(false);
 
-  const { workMinutes, breakMinutes, breaksEnabled } = timerState;
+  const { workMinutes, breakMinutes, breaksEnabled, loopEnabled, totalSessionMinutes } = timerState;
+  const fullCycleDuration = workMinutes + (breaksEnabled ? breakMinutes : 0);
 
   useEffect(() => {
     if (isOpen) {
@@ -242,7 +245,7 @@ export const SettingsModal: React.FC<Props> = ({
                 Timer Intervals & Rhythms
               </h3>
               <p className="text-[11px] text-[var(--text-muted)]">
-                Choose a proven focus preset or customize exact work and break durations
+                Choose a proven focus preset or customize exact work, break, and loop settings
               </p>
             </div>
           </div>
@@ -347,6 +350,83 @@ export const SettingsModal: React.FC<Props> = ({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Loop Mode & Total Session Duration */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+            {/* Loop Toggle */}
+            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[var(--ink-wash)] border border-[var(--border-hairline)]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CalmSwitch
+                    id="settings-loop-toggle"
+                    checked={loopEnabled}
+                    onCheckedChange={(checked) => onConfigureTimer({ loopEnabled: checked })}
+                    label="Loop Sessions"
+                  />
+                </div>
+                <p className="text-[10px] text-[var(--text-faint)] mt-1">
+                  {loopEnabled ? 'Auto-cycle focus & breaks' : 'Stop after total duration'}
+                </p>
+              </div>
+              <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-[var(--bg-canvas)] text-[var(--accent-main)] border border-[var(--border-hairline)]">
+                {loopEnabled ? 'Loop ON' : 'Fixed'}
+              </span>
+            </div>
+
+            {/* Total Duration (Required if loop is off) */}
+            {!loopEnabled ? (
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[var(--ink-wash)] border border-[var(--accent-main)]/40 ring-1 ring-[var(--accent-main)]/20">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium text-[var(--text-main)]">Total Duration</span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold uppercase bg-[var(--accent-main)]/15 text-[var(--accent-main)]">
+                      Required
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-[var(--text-faint)] mt-0.5">
+                    Default: {fullCycleDuration}m (1 full cycle)
+                  </p>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onConfigureTimer({
+                        totalSessionMinutes: Math.max(1, totalSessionMinutes - 5),
+                      })
+                    }
+                    className="w-7 h-7 flex items-center justify-center rounded-full bg-[var(--bg-canvas)] border border-[var(--border-hairline)] hover:bg-[var(--ink-wash-strong)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+                    aria-label="Decrease total duration"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="font-mono text-xs w-11 text-center font-semibold">
+                    {totalSessionMinutes}m
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onConfigureTimer({
+                        totalSessionMinutes: Math.min(1440, totalSessionMinutes + 5),
+                      })
+                    }
+                    className="w-7 h-7 flex items-center justify-center rounded-full bg-[var(--bg-canvas)] border border-[var(--border-hairline)] hover:bg-[var(--ink-wash-strong)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+                    aria-label="Increase total duration"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="hidden sm:flex items-center justify-between p-3.5 rounded-2xl bg-[var(--ink-wash)]/40 border border-[var(--border-hairline)] opacity-60">
+                <div>
+                  <span className="text-xs font-medium text-[var(--text-faint)]">Total Duration</span>
+                  <p className="text-[10px] text-[var(--text-faint)]">Active only when loop is off</p>
+                </div>
+                <span className="text-[10px] font-mono text-[var(--text-faint)]">Unlimited (Looping)</span>
+              </div>
+            )}
           </div>
         </section>
 

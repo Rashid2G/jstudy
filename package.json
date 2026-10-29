@@ -6,13 +6,13 @@
   "main": "server/index.ts",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "server": "tsx watch server/index.ts",
+    "dev": "vite --host 0.0.0.0",
+    "server": "PORT=3001 HOST=0.0.0.0 tsx watch server/index.ts",
     "build": "vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "start": "NODE_ENV=production tsx server/index.ts",
-    "preview": "vite preview"
+    "start": "NODE_ENV=production PORT=3001 HOST=0.0.0.0 tsx server/index.ts",
+    "preview": "vite preview --host 0.0.0.0"
   },
   "keywords": [
     "study",

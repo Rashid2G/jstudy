@@ -160,4 +160,43 @@ describe('App React Component Integration', () => {
       expect(screen.getByText(/Color Palettes & Theme/i)).toBeDefined();
     });
   });
+
+  it('toggles Loop Sessions and configures required Total Duration in Settings modal', async () => {
+    await act(async () => {
+      render(<App />);
+    });
+
+    const settingsBtn = screen.getByTitle('Open Settings');
+    await act(async () => {
+      fireEvent.click(settingsBtn);
+    });
+
+    // Loop is ON by default
+    const loopToggle = screen.getByRole('switch', { name: /Loop Sessions/i });
+    expect(loopToggle).toBeDefined();
+    expect(loopToggle.getAttribute('aria-checked')).toBe('true');
+
+    // Click to turn Loop OFF
+    await act(async () => {
+      fireEvent.click(loopToggle);
+    });
+    expect(loopToggle.getAttribute('aria-checked')).toBe('false');
+
+    // Required Total Duration control appears with default 1 full duration of session and break (30m)
+    await waitFor(() => {
+      expect(screen.getByText(/Required/i)).toBeDefined();
+      expect(screen.getByText(/1 full cycle/i)).toBeDefined();
+    });
+
+    // Default duration is 30m (25m focus + 5m break)
+    expect(screen.getAllByText('30m').length).toBeGreaterThanOrEqual(1);
+
+    // Increase total duration by 5m (to 35m)
+    const incTotalBtn = screen.getByRole('button', { name: /Increase total duration/i });
+    await act(async () => {
+      fireEvent.click(incTotalBtn);
+    });
+
+    expect(screen.getAllByText('35m').length).toBeGreaterThanOrEqual(1);
+  });
 });

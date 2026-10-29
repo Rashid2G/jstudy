@@ -9,6 +9,8 @@ interface Props {
     workMinutes?: number;
     breakMinutes?: number;
     breaksEnabled?: boolean;
+    loopEnabled?: boolean;
+    totalSessionMinutes?: number;
   }) => void;
   isExpanded?: boolean;
   isCompressed?: boolean;
@@ -43,7 +45,8 @@ export const TimerRhythmWidget: React.FC<Props> = ({
   className = '',
   style,
 }) => {
-  const { workMinutes, breakMinutes, breaksEnabled } = timerState;
+  const { workMinutes, breakMinutes, breaksEnabled, loopEnabled, totalSessionMinutes } = timerState;
+  const fullCycleDuration = workMinutes + (breaksEnabled ? breakMinutes : 0);
 
   const activePreset = PRESETS.find(
     (p) =>
@@ -86,6 +89,7 @@ export const TimerRhythmWidget: React.FC<Props> = ({
             </span>
             <p className="text-xs font-semibold text-[var(--text-main)] truncate mt-0.5 max-w-[110px]">
               {breaksEnabled ? `${workMinutes}m / ${breakMinutes}m` : `${workMinutes}m flow`}
+              {loopEnabled ? ' · Loop' : ` · ${totalSessionMinutes}m`}
             </p>
           </div>
           <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-[var(--ink-wash)] text-[var(--accent-main)] border border-[var(--border-hairline)] shrink-0">
@@ -95,7 +99,7 @@ export const TimerRhythmWidget: React.FC<Props> = ({
       ) : (
         /* Standard Header Bar (for resting, compressed-short, and expanded) */
         <div
-          className={`flex items-center justify-between cursor-pointer w-full ${!isExpanded ? 'h-full' : ''}`}
+          className={`apple-widget-header flex items-center justify-between gap-2 cursor-pointer w-full ${!isExpanded ? 'h-full' : ''}`}
           onClick={onToggleExpand}
           title={isExpanded ? 'Click to collapse' : 'Click to expand'}
         >
@@ -126,7 +130,7 @@ export const TimerRhythmWidget: React.FC<Props> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="apple-widget-meta flex items-center gap-1.5 sm:gap-2 shrink-0">
             <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-[var(--ink-wash)] text-[var(--accent-main)] border border-[var(--border-hairline)]">
               {activePreset ? activePreset.name : `${workMinutes}m`}
             </span>
@@ -231,7 +235,7 @@ export const TimerRhythmWidget: React.FC<Props> = ({
               </div>
 
               {/* Breaks Switch & Stepper Card */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-[var(--ink-wash)] border border-[var(--border-hairline)]">
+              <div className="flex flex-col gap-2.5 p-3 rounded-xl bg-[var(--ink-wash)] border border-[var(--border-hairline)]">
                 <div className="flex items-center justify-between sm:justify-start gap-3" onClick={(e) => e.stopPropagation()}>
                   <CalmSwitch
                     id="widget-breaks-toggle"
@@ -245,9 +249,9 @@ export const TimerRhythmWidget: React.FC<Props> = ({
                 </div>
 
                 {breaksEnabled ? (
-                  <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-[var(--border-hairline)]/50">
-                    <span className="text-[10px] text-[var(--text-faint)] sm:hidden">Duration</span>
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--border-hairline)]/50">
+                    <span className="text-[10px] text-[var(--text-faint)]">Duration</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -281,6 +285,79 @@ export const TimerRhythmWidget: React.FC<Props> = ({
                   </span>
                 )}
               </div>
+            </div>
+
+            {/* Loop Sessions Toggle & Required Total Duration */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              {/* Loop Toggle Card */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--ink-wash)] border border-[var(--border-hairline)]">
+                <div onClick={(e) => e.stopPropagation()}>
+                  <CalmSwitch
+                    id="widget-loop-toggle"
+                    checked={loopEnabled}
+                    onCheckedChange={(checked) => onConfigureTimer({ loopEnabled: checked })}
+                    label="Loop Sessions"
+                  />
+                  <p className="text-[10px] text-[var(--text-faint)] mt-0.5">
+                    {loopEnabled ? 'Cycles sessions & rest' : 'Stops after duration'}
+                  </p>
+                </div>
+                <span className="text-[10px] font-mono text-[var(--accent-main)] px-2 py-0.5 rounded-full bg-[var(--bg-canvas)] border border-[var(--border-hairline)]">
+                  {loopEnabled ? 'Loop ON' : 'Fixed'}
+                </span>
+              </div>
+
+              {/* Total Duration (Required when loop is off) */}
+              {!loopEnabled ? (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--ink-wash)] border border-[var(--accent-main)]/40 ring-1 ring-[var(--accent-main)]/20">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-[var(--text-main)]">Total Duration</span>
+                      <span className="text-[9px] font-mono font-semibold px-1 rounded bg-[var(--accent-main)]/15 text-[var(--accent-main)] uppercase">
+                        Req
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[var(--text-faint)] mt-0.5">
+                      Default: {fullCycleDuration}m
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onConfigureTimer({ totalSessionMinutes: Math.max(1, totalSessionMinutes - 5) });
+                      }}
+                      className="w-7 h-7 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-hairline)] flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash-strong)] active:scale-95 transition-all shadow-sm"
+                      aria-label="Decrease total duration"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="font-mono text-xs w-10 text-center font-semibold text-[var(--text-main)]">
+                      {totalSessionMinutes}m
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onConfigureTimer({ totalSessionMinutes: Math.min(1440, totalSessionMinutes + 5) });
+                      }}
+                      className="w-7 h-7 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-hairline)] flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash-strong)] active:scale-95 transition-all shadow-sm"
+                      aria-label="Increase total duration"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="hidden sm:flex items-center justify-between p-3 rounded-xl bg-[var(--ink-wash)]/40 border border-[var(--border-hairline)] opacity-60">
+                  <div>
+                    <span className="text-xs font-medium text-[var(--text-faint)]">Total Duration</span>
+                    <p className="text-[10px] text-[var(--text-faint)]">Active only when loop is off</p>
+                  </div>
+                  <span className="text-[10px] font-mono text-[var(--text-faint)]">Unlimited (Looping)</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

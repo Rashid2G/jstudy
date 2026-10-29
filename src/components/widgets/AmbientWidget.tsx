@@ -113,7 +113,7 @@ export const AmbientWidget: React.FC<Props> = ({
       ) : (
         /* Standard Header Bar (for resting, compressed-short, and expanded) */
         <div
-          className={`flex items-center justify-between cursor-pointer w-full ${!isExpanded ? 'h-full' : ''}`}
+          className={`apple-widget-header flex items-center justify-between gap-2 cursor-pointer w-full ${!isExpanded ? 'h-full' : ''}`}
           onClick={onToggleExpand}
           title={isExpanded ? 'Click to collapse' : 'Click to expand'}
         >
@@ -142,7 +142,7 @@ export const AmbientWidget: React.FC<Props> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="apple-widget-meta flex items-center gap-1.5 sm:gap-2 shrink-0">
             <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-[var(--ink-wash)] text-[var(--accent-main)] border border-[var(--border-hairline)]">
               {ambientSound === 'none' ? 'Off' : `${Math.round(ambientVolume * 100)}%`}
             </span>

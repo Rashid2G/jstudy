@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createInitialTimerState, tickTimer, TimerState, clampMinutes } from '../utils/timer.js';
+import {
+  createInitialTimerState,
+  tickTimer,
+  TimerState,
+  clampMinutes,
+  calculateDefaultTotalSessionMinutes,
+} from '../utils/timer.js';
 import { sound } from '../utils/sound.js';
 import { api } from '../services/api.js';
 
@@ -7,15 +13,19 @@ interface UseStudyTimerOptions {
   initialWorkMinutes?: number;
   initialBreakMinutes?: number;
   initialBreaksEnabled?: boolean;
+  initialLoopEnabled?: boolean;
   onSessionSaved?: () => void;
 }
 
-const STORAGE_KEY = 'studinty_persisted_timer_v4';
+const STORAGE_KEY = 'studinty_persisted_timer_v5';
 
 interface PersistedTimerState {
   workMinutes: number;
   breakMinutes: number;
   breaksEnabled: boolean;
+  loopEnabled: boolean;
+  totalSessionMinutes: number;
+  totalSessionRemainingSeconds: number;
   phase: 'work' | 'break';
   remainingSeconds: number;
   totalDurationSeconds: number;
@@ -26,10 +36,19 @@ interface PersistedTimerState {
   savedAt: number;
 }
 
-function loadPersistedState(defaultWork = 25, defaultBreak = 5, defaultBreaksEnabled = true) {
+function loadPersistedState(
+  defaultWork = 25,
+  defaultBreak = 5,
+  defaultBreaksEnabled = true,
+  defaultLoopEnabled = true
+) {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
+      // Check v5 then v4 for migration
+      const raw =
+        window.localStorage.getItem(STORAGE_KEY) ||
+        window.localStorage.getItem('studinty_persisted_timer_v4');
+
       if (raw) {
         const data = JSON.parse(raw);
         if (typeof data.remainingSeconds === 'number' && typeof data.totalDurationSeconds === 'number') {
@@ -38,17 +57,38 @@ function loadPersistedState(defaultWork = 25, defaultBreak = 5, defaultBreaksEna
           const breakMinutes = breaksEnabled
             ? clampMinutes(data.breakMinutes, 1, 90, defaultBreak)
             : clampMinutes(data.breakMinutes, 0, 90, 0);
+          const loopEnabled = data.loopEnabled ?? defaultLoopEnabled;
+
+          const defaultTotal = calculateDefaultTotalSessionMinutes(
+            workMinutes,
+            breakMinutes,
+            breaksEnabled
+          );
+          const totalSessionMinutes =
+            typeof data.totalSessionMinutes === 'number'
+              ? clampMinutes(data.totalSessionMinutes, 1, 1440, defaultTotal)
+              : defaultTotal;
+
+          const totalSessionRemainingSeconds =
+            typeof data.totalSessionRemainingSeconds === 'number'
+              ? Math.max(0, data.totalSessionRemainingSeconds)
+              : totalSessionMinutes * 60;
 
           return {
             timerState: {
               phase: data.phase === 'break' ? ('break' as const) : ('work' as const),
               remainingSeconds: Math.max(0, data.remainingSeconds),
               totalDurationSeconds: Math.max(1, data.totalDurationSeconds),
-              isRunning: Boolean(data.isRunning),
+              // Always restore in a paused state on reload to avoid unprompted automatic
+              // countdowns and ensure timer and audio start synchronously upon user interaction
+              isRunning: false,
               completedCycles: typeof data.completedCycles === 'number' ? data.completedCycles : 0,
               breaksEnabled,
               workMinutes,
               breakMinutes,
+              loopEnabled,
+              totalSessionMinutes,
+              totalSessionRemainingSeconds,
             },
             sessionGoal: typeof data.sessionGoal === 'string' ? data.sessionGoal : '',
             sessionStartedAt: (data.sessionStartedAt as string | null) || null,
@@ -64,6 +104,7 @@ function loadPersistedState(defaultWork = 25, defaultBreak = 5, defaultBreaksEna
     workMinutes: defaultWork,
     breakMinutes: defaultBreak,
     breaksEnabled: defaultBreaksEnabled,
+    loopEnabled: defaultLoopEnabled,
   });
 
   return {
@@ -80,6 +121,9 @@ function savePersistedState(state: TimerState, goal: string, sessionStartedAt: s
         workMinutes: state.workMinutes,
         breakMinutes: state.breakMinutes,
         breaksEnabled: state.breaksEnabled,
+        loopEnabled: state.loopEnabled,
+        totalSessionMinutes: state.totalSessionMinutes,
+        totalSessionRemainingSeconds: state.totalSessionRemainingSeconds,
         phase: state.phase,
         remainingSeconds: state.remainingSeconds,
         totalDurationSeconds: state.totalDurationSeconds,
@@ -90,6 +134,8 @@ function savePersistedState(state: TimerState, goal: string, sessionStartedAt: s
         savedAt: Date.now(),
       };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      // Also write back to v4 for tests and legacy readers
+      window.localStorage.setItem('studinty_persisted_timer_v4', JSON.stringify(payload));
     }
   } catch (err) {
     console.warn('Could not save persisted timer state:', err);
@@ -100,10 +146,16 @@ export function useStudyTimer({
   initialWorkMinutes = 25,
   initialBreakMinutes = 5,
   initialBreaksEnabled = true,
+  initialLoopEnabled = true,
   onSessionSaved,
 }: UseStudyTimerOptions = {}) {
   const [initialData] = useState(() =>
-    loadPersistedState(initialWorkMinutes, initialBreakMinutes, initialBreaksEnabled)
+    loadPersistedState(
+      initialWorkMinutes,
+      initialBreakMinutes,
+      initialBreaksEnabled,
+      initialLoopEnabled
+    )
   );
 
   const [timerState, setTimerState] = useState<TimerState>(initialData.timerState);
@@ -128,7 +180,7 @@ export function useStudyTimer({
   // Save state on unload/beforeunload so page reload captures exact moment
   useEffect(() => {
     const handleBeforeUnload = () => {
-      savePersistedState(stateRef.current, goalRef.current, sessionStartRef.current);
+      savePersistedState({ ...stateRef.current, isRunning: false }, goalRef.current, sessionStartRef.current);
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('pagehide', handleBeforeUnload);
@@ -184,6 +236,11 @@ export function useStudyTimer({
         } else {
           sessionStartRef.current = null;
         }
+
+        // When a new work phase starts running automatically in a loop or multi-cycle session
+        if (nextState.isRunning && nextState.phase === 'work') {
+          sessionStartRef.current = new Date().toISOString();
+        }
       }
     }, 1000);
 
@@ -212,11 +269,12 @@ export function useStudyTimer({
         prev.phase === 'work'
           ? Math.max(1, prev.workMinutes) * 60
           : Math.max(1, prev.breakMinutes || 5) * 60;
-      const updated = {
+      const updated: TimerState = {
         ...prev,
         isRunning: false,
         totalDurationSeconds: dur,
         remainingSeconds: dur,
+        totalSessionRemainingSeconds: prev.totalSessionMinutes * 60,
       };
       savePersistedState(updated, goalRef.current, null);
       return updated;
@@ -234,6 +292,7 @@ export function useStudyTimer({
           isRunning: false,
           totalDurationSeconds: dur,
           remainingSeconds: dur,
+          totalSessionRemainingSeconds: prev.totalSessionMinutes * 60,
         };
         savePersistedState(updated, goalRef.current, null);
         return updated;
@@ -256,7 +315,13 @@ export function useStudyTimer({
   }, []);
 
   const configureCustomTimer = useCallback(
-    (updates: { workMinutes?: number; breakMinutes?: number; breaksEnabled?: boolean }) => {
+    (updates: {
+      workMinutes?: number;
+      breakMinutes?: number;
+      breaksEnabled?: boolean;
+      loopEnabled?: boolean;
+      totalSessionMinutes?: number;
+    }) => {
       sessionStartRef.current = null;
       setTimerState((prev) => {
         const nextWork =
@@ -275,6 +340,38 @@ export function useStudyTimer({
           ? clampMinutes(rawBreak, 1, 90, 5)
           : clampMinutes(rawBreak, 0, 90, 0);
 
+        const nextLoopEnabled =
+          updates.loopEnabled !== undefined ? updates.loopEnabled : prev.loopEnabled;
+
+        const defaultTotal = calculateDefaultTotalSessionMinutes(
+          nextWork,
+          nextBreak,
+          nextBreaksEnabled
+        );
+
+        let nextTotalSessionMinutes: number;
+        if (updates.totalSessionMinutes !== undefined) {
+          nextTotalSessionMinutes = clampMinutes(updates.totalSessionMinutes, 1, 1440, defaultTotal);
+        } else if (
+          updates.workMinutes !== undefined ||
+          updates.breakMinutes !== undefined ||
+          updates.breaksEnabled !== undefined ||
+          (updates.loopEnabled !== undefined && !updates.loopEnabled && prev.loopEnabled)
+        ) {
+          const prevDefault = calculateDefaultTotalSessionMinutes(
+            prev.workMinutes,
+            prev.breakMinutes,
+            prev.breaksEnabled
+          );
+          if (prev.totalSessionMinutes === prevDefault || (updates.loopEnabled === false && prev.loopEnabled)) {
+            nextTotalSessionMinutes = defaultTotal;
+          } else {
+            nextTotalSessionMinutes = prev.totalSessionMinutes;
+          }
+        } else {
+          nextTotalSessionMinutes = prev.totalSessionMinutes || defaultTotal;
+        }
+
         const nextPhase = !nextBreaksEnabled ? 'work' : prev.phase;
         const dur = (nextPhase === 'work' ? nextWork : Math.max(1, nextBreak)) * 60;
 
@@ -285,6 +382,9 @@ export function useStudyTimer({
           workMinutes: nextWork,
           breakMinutes: nextBreak,
           breaksEnabled: nextBreaksEnabled,
+          loopEnabled: nextLoopEnabled,
+          totalSessionMinutes: nextTotalSessionMinutes,
+          totalSessionRemainingSeconds: nextTotalSessionMinutes * 60,
           totalDurationSeconds: dur,
           remainingSeconds: dur,
         };

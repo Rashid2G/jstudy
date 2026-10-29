@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import express from 'express';
 import { createApp } from './app.js';
 
-const PORT = process.env.PORT || 3001;
+const rawPort = process.env.PORT;
+const PORT = Number(rawPort && rawPort !== '3773' ? rawPort : (process.env.APP_PORT || 3001));
+const HOST = process.env.HOST || '0.0.0.0';
 const { app } = createApp();
 
 // Serve client in production if built (Express 5 compatible SPA fallback)
@@ -19,8 +21,8 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-const server = app.listen(PORT, () => {
-  console.log(`[studinty] Server listening on port ${PORT}`);
+const server = app.listen(PORT, HOST, () => {
+  console.log(`[studinty] Server listening on http://${HOST}:${PORT}`);
 });
 
 export default server;

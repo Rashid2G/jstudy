@@ -35,6 +35,8 @@ export const Timer: React.FC<Props> = ({
     workMinutes,
     breakMinutes,
     breaksEnabled,
+    loopEnabled,
+    totalSessionMinutes,
   } = timerState;
 
   const radius = 104;
@@ -137,11 +139,12 @@ export const Timer: React.FC<Props> = ({
                 {breaksEnabled
                   ? `${workMinutes}m · ${breakMinutes}m rest`
                   : `${workMinutes}m continuous`}
+                {loopEnabled ? ' · Loop' : ` · ${totalSessionMinutes}m total`}
               </span>
             </div>
           </div>
 
-          {/* Start / Pause / Resume Button */}
+          {/* Start / Pause / Resume Button - comfortable hit target with safe clearance from widgets */}
           <button
             type="button"
             onClick={onToggleTimer}
@@ -182,7 +185,9 @@ export const Timer: React.FC<Props> = ({
           <span className="text-[10px] font-mono text-[var(--text-faint)] pl-1">
             {completedCycles > 0
               ? `${completedCycles} ${completedCycles === 1 ? 'cycle' : 'cycles'}`
-              : 'Cycle 0'}
+              : loopEnabled
+                ? 'Loop on'
+                : `${totalSessionMinutes}m total`}
           </span>
         </div>
       </div>
