@@ -28,6 +28,8 @@ interface Props {
     genre: string;
     stream_type?: string;
   }) => Promise<void>;
+  onOpenAddStation?: () => void;
+  onOpenSettings?: (options?: { section?: string; addStation?: boolean }) => void;
   ambientSound: AmbientSoundType;
   ambientVolume: number;
   onAmbientSoundChange: (sound: AmbientSoundType) => void;
@@ -50,6 +52,8 @@ export const AppleWidgetsShelf: React.FC<Props> = ({
   radioVolume,
   onRadioVolumeChange,
   onAddStation,
+  onOpenAddStation,
+  onOpenSettings,
   ambientSound,
   ambientVolume,
   onAmbientSoundChange,
@@ -109,6 +113,16 @@ export const AppleWidgetsShelf: React.FC<Props> = ({
       ? 'calc(27% - 5px)'
       : 'calc(50% - 5px)';
 
+  const isRhythmTall = isAnyExpanded && activeWidget === 'soundtrack';
+  const isSoundtrackTall = isAnyExpanded && activeWidget === 'rhythm';
+  const isAmbientTall = isAnyExpanded && activeWidget === 'appearance';
+  const isAppearanceTall = isAnyExpanded && activeWidget === 'ambient';
+
+  const isRhythmNarrow = isAnyExpanded && activeWidget !== 'rhythm';
+  const isSoundtrackNarrow = isAnyExpanded && activeWidget === 'rhythm';
+  const isAmbientNarrow = isAnyExpanded && (activeWidget === 'soundtrack' || activeWidget === 'appearance');
+  const isAppearanceNarrow = isAnyExpanded && (activeWidget === 'rhythm' || activeWidget === 'ambient');
+
   return (
     <section
       role="region"
@@ -126,6 +140,8 @@ export const AppleWidgetsShelf: React.FC<Props> = ({
           onConfigureTimer={onConfigureTimer}
           isExpanded={activeWidget === 'rhythm'}
           isCompressed={isAnyExpanded && activeWidget !== 'rhythm'}
+          isTall={isRhythmTall}
+          isNarrow={isRhythmNarrow}
           onMouseEnter={() => handleMouseEnter('rhythm')}
           onToggleExpand={() => handleToggleExpand('rhythm')}
           onClose={() => setActiveWidget(null)}
@@ -148,8 +164,12 @@ export const AppleWidgetsShelf: React.FC<Props> = ({
           radioVolume={radioVolume}
           onRadioVolumeChange={onRadioVolumeChange}
           onAddStation={onAddStation}
+          onOpenAddStation={onOpenAddStation}
+          onOpenSettings={onOpenSettings}
           isExpanded={activeWidget === 'soundtrack'}
           isCompressed={isAnyExpanded && activeWidget !== 'soundtrack'}
+          isTall={isSoundtrackTall}
+          isNarrow={isSoundtrackNarrow}
           onMouseEnter={() => handleMouseEnter('soundtrack')}
           onToggleExpand={() => handleToggleExpand('soundtrack')}
           onClose={() => setActiveWidget(null)}
@@ -169,6 +189,8 @@ export const AppleWidgetsShelf: React.FC<Props> = ({
           onAmbientVolumeChange={onAmbientVolumeChange}
           isExpanded={activeWidget === 'ambient'}
           isCompressed={isAnyExpanded && activeWidget !== 'ambient'}
+          isTall={isAmbientTall}
+          isNarrow={isAmbientNarrow}
           onMouseEnter={() => handleMouseEnter('ambient')}
           onToggleExpand={() => handleToggleExpand('ambient')}
           onClose={() => setActiveWidget(null)}
@@ -188,6 +210,8 @@ export const AppleWidgetsShelf: React.FC<Props> = ({
           onToggleColorMode={onToggleColorMode}
           isExpanded={activeWidget === 'appearance'}
           isCompressed={isAnyExpanded && activeWidget !== 'appearance'}
+          isTall={isAppearanceTall}
+          isNarrow={isAppearanceNarrow}
           onMouseEnter={() => handleMouseEnter('appearance')}
           onToggleExpand={() => handleToggleExpand('appearance')}
           onClose={() => setActiveWidget(null)}

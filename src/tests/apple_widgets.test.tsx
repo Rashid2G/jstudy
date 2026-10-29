@@ -202,6 +202,68 @@ describe('Apple Style Interactive Widgets Shelf', () => {
       fireEvent.click(sandBtn);
     });
 
-    expect(document.documentElement.getAttribute('data-theme')).toBe('sand');
+        expect(document.documentElement.getAttribute('data-theme')).toBe('sand');
+  });
+
+  it('opens settings modal directly at soundtrack station form when clicking Add custom URL in soundtrack widget', async () => {
+    await act(async () => {
+      render(<App />);
+    });
+
+    const soundtrackWidget = screen.getByRole('region', { name: /Soundtrack Widget/i });
+
+    // Expand soundtrack widget
+    await act(async () => {
+      fireEvent.mouseEnter(soundtrackWidget);
+    });
+    expect(soundtrackWidget.classList.contains('is-expanded')).toBe(true);
+
+    // Find 'Add custom URL' button in the expanded soundtrack widget
+    const addUrlBtn = screen.getByRole('button', { name: /Add custom URL/i });
+    expect(addUrlBtn).toBeDefined();
+
+    await act(async () => {
+      fireEvent.click(addUrlBtn);
+    });
+
+    // Modal opens directly to the soundtrack form with Station Title input visible
+    const stationTitleInput = screen.getByPlaceholderText(/e\.g\. My Study Beats/i);
+    expect(stationTitleInput).toBeDefined();
+
+    // Verify modal dialog is open
+    expect(screen.getByRole('dialog', { name: /Settings & Preferences/i })).toBeDefined();
+  });
+
+  it('renders unfocused companion widgets cleanly centered without layout distortion', async () => {
+    await act(async () => {
+      render(<App />);
+    });
+
+    const soundtrackWidget = screen.getByRole('region', { name: /Soundtrack Widget/i });
+    const rhythmWidget = screen.getByRole('region', { name: /Timer Rhythm Widget/i });
+    const ambientWidget = screen.getByRole('region', { name: /Ambient Atmosphere Widget/i });
+    const appearanceWidget = screen.getByRole('region', { name: /Appearance Widget/i });
+
+    // Expand Soundtrack widget
+    await act(async () => {
+      fireEvent.mouseEnter(soundtrackWidget);
+    });
+
+    // Rhythm is companion in the tall column (compressed & tall)
+    expect(rhythmWidget.classList.contains('is-compressed')).toBe(true);
+    // Ambient & Appearance are companions in the short row (compressed & short)
+    expect(ambientWidget.classList.contains('is-compressed')).toBe(true);
+    expect(appearanceWidget.classList.contains('is-compressed')).toBe(true);
+
+    // Rhythm widget shows cleanly centered Rhythm label and Pomodoro/timing text
+    expect(rhythmWidget.textContent).toContain('Rhythm');
+    expect(rhythmWidget.textContent).toContain('Pomodoro');
+
+    // Ambient widget shows Atmosphere / Ambient and Off badge
+    expect(ambientWidget.textContent).toContain('Off');
+
+    // Appearance widget shows Theme and Dark badge
+    expect(appearanceWidget.textContent).toContain('Dark');
   });
 });
+

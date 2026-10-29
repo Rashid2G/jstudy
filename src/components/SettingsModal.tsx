@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RadioStation, CalmTheme, ColorMode, AmbientSoundType } from '../types/index.js';
 import { TimerState } from '../utils/timer.js';
 import { CalmDialog, CalmSwitch, CalmSlider } from './ui.js';
 import { ThemeSelector } from './ThemeSelector.js';
 import { AmbientMixer } from './AmbientMixer.js';
-import { Minus, Plus, Music, Volume2, PlusCircle, Trash2, Clock, Palette } from 'lucide-react';
+import { Minus, Plus, Music, Volume2, PlusCircle, Trash2, Clock, Palette, Loader2 } from 'lucide-react';
+import { extractYouTubeId, isYouTubeUrl } from '../utils/youtube.js';
+import { api } from '../services/api.js';
 
 interface Props {
   isOpen: boolean;
@@ -36,6 +38,8 @@ interface Props {
   onSelectTheme: (theme: CalmTheme) => void;
   colorMode: ColorMode;
   onToggleColorMode: () => void;
+  initialSection?: string | null;
+  initialAddStation?: boolean;
 }
 
 const QUICK_PRESETS = [
@@ -65,14 +69,106 @@ export const SettingsModal: React.FC<Props> = ({
   onSelectTheme,
   colorMode,
   onToggleColorMode,
+  initialSection,
+  initialAddStation = false,
 }) => {
   const [isAddingStation, setIsAddingStation] = useState(false);
   const [stationName, setStationName] = useState('');
   const [stationUrl, setStationUrl] = useState('');
   const [stationGenre, setStationGenre] = useState('lofi');
   const [isSubmittingStation, setIsSubmittingStation] = useState(false);
+  const [isFetchingMeta, setIsFetchingMeta] = useState(false);
 
   const { workMinutes, breakMinutes, breaksEnabled } = timerState;
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialAddStation) {
+        setIsAddingStation(true);
+      }
+      if (initialSection === 'soundtrack' || initialAddStation) {
+        const timer = setTimeout(() => {
+          const el = document.getElementById('settings-soundtrack-section');
+          if (el && typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+          const inputEl = document.getElementById('settings-station-name-input');
+          if (inputEl) {
+            inputEl.focus();
+          }
+        }, 120);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      setIsAddingStation(false);
+    }
+  }, [isOpen, initialSection, initialAddStation]);
+
+  const fetchAndSetYouTubeTitle = async (candidateUrl: string, targetField: 'name' | 'url') => {
+    const videoId = extractYouTubeId(candidateUrl);
+    if (!videoId) return;
+
+    setIsFetchingMeta(true);
+    try {
+      const meta = await api.getYouTubeMeta(candidateUrl);
+      if (meta && meta.title) {
+        if (targetField === 'name') {
+          setStationName(meta.title);
+        } else {
+          setStationName((prev) => {
+            if (!prev.trim() || isYouTubeUrl(prev) || extractYouTubeId(prev)) {
+              return meta.title;
+            }
+            return prev;
+          });
+        }
+      }
+    } catch {
+      // If errored just leave it as it is
+    } finally {
+      setIsFetchingMeta(false);
+    }
+  };
+
+  const handleTitlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text').trim();
+    if (isYouTubeUrl(text) || extractYouTubeId(text)) {
+      setStationName(text);
+      if (!stationUrl.trim()) {
+        setStationUrl(text);
+      }
+      fetchAndSetYouTubeTitle(text, 'name');
+    }
+  };
+
+  const handleUrlPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text').trim();
+    if (isYouTubeUrl(text) || extractYouTubeId(text)) {
+      setStationUrl(text);
+      fetchAndSetYouTubeTitle(text, 'url');
+    }
+  };
+
+  const handleTitleChange = (val: string) => {
+    setStationName(val);
+    const trimmed = val.trim();
+    if (isYouTubeUrl(trimmed) || extractYouTubeId(trimmed)) {
+      if (!stationUrl.trim()) {
+        setStationUrl(trimmed);
+      }
+      fetchAndSetYouTubeTitle(trimmed, 'name');
+    }
+  };
+
+  const handleUrlChange = (val: string) => {
+    setStationUrl(val);
+    const trimmed = val.trim();
+    if (isYouTubeUrl(trimmed) || extractYouTubeId(trimmed)) {
+      if (!stationName.trim() || isYouTubeUrl(stationName) || extractYouTubeId(stationName)) {
+        fetchAndSetYouTubeTitle(trimmed, 'url');
+      }
+    }
+  };
 
   const handleAddStationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,7 +231,7 @@ export const SettingsModal: React.FC<Props> = ({
           />
         </section>
 
-        {/* SECTION 2: TIMER DURATIONS & PRESETS */}
+        {/* SECTION 2: TIMER DURATION & INTERVALS */}
         <section className="space-y-4 pb-7 border-b border-[var(--border-hairline)]">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 rounded-lg bg-[var(--ink-wash)] text-[var(--accent-main)]">
@@ -151,13 +247,13 @@ export const SettingsModal: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Quick Presets */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {/* Quick Preset Buttons */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
             {QUICK_PRESETS.map((preset) => {
-              const isSelected =
+              const isActive =
                 workMinutes === preset.work &&
-                breaksEnabled === preset.breaks &&
-                (!preset.breaks || breakMinutes === preset.brk);
+                breakMinutes === preset.brk &&
+                breaksEnabled === (preset.breaks ? 1 : 0);
               return (
                 <button
                   key={preset.label}
@@ -169,25 +265,29 @@ export const SettingsModal: React.FC<Props> = ({
                       breaksEnabled: preset.breaks,
                     })
                   }
-                  className={`flex flex-col items-center justify-center p-3 rounded-2xl text-center transition-all border ${
-                    isSelected
-                      ? 'border-[var(--accent-main)] bg-[var(--ink-wash-strong)] ring-2 ring-[var(--accent-main)]/30 text-[var(--text-main)] shadow-sm'
-                      : 'border-[var(--border-hairline)] bg-[var(--ink-wash)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash-strong)]'
+                  className={`p-3 rounded-2xl border text-left transition-all ${
+                    isActive
+                      ? 'border-[var(--accent-main)] bg-[var(--ink-wash-strong)] ring-2 ring-[var(--accent-main)]/30 shadow-sm'
+                      : 'border-[var(--border-hairline)] bg-[var(--ink-wash)] hover:bg-[var(--ink-wash-strong)]'
                   }`}
                 >
-                  <span className="font-mono text-sm font-semibold">{preset.label}</span>
-                  <span className="text-[10px] text-[var(--text-faint)] mt-0.5">{preset.desc}</span>
+                  <p className="font-mono text-sm font-semibold text-[var(--text-main)]">
+                    {preset.label}
+                  </p>
+                  <p className="text-[10px] text-[var(--text-faint)] mt-0.5 truncate">
+                    {preset.desc}
+                  </p>
                 </button>
               );
             })}
           </div>
 
-          {/* Steppers */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+          {/* Granular Duration Controls */}
+          <div className="space-y-3 pt-2">
             {/* Focus Duration */}
             <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[var(--ink-wash)] border border-[var(--border-hairline)]">
               <div>
-                <span className="text-xs font-medium text-[var(--text-main)]">Focus Time</span>
+                <span className="text-xs font-medium text-[var(--text-main)]">Focus Session Duration</span>
                 <p className="text-[10px] text-[var(--text-faint)]">Deep study blocks</p>
               </div>
               <div className="flex items-center gap-2.5">
@@ -251,7 +351,7 @@ export const SettingsModal: React.FC<Props> = ({
         </section>
 
         {/* SECTION 3: SOUNDTRACK RADIO STATIONS & VOLUME */}
-        <section className="space-y-4 pb-7 border-b border-[var(--border-hairline)]">
+        <section id="settings-soundtrack-section" className="space-y-4 pb-7 border-b border-[var(--border-hairline)] scroll-mt-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="p-1.5 rounded-lg bg-[var(--ink-wash)] text-[var(--accent-main)]">
@@ -269,7 +369,7 @@ export const SettingsModal: React.FC<Props> = ({
             <button
               type="button"
               onClick={() => setIsAddingStation((v) => !v)}
-              className="text-xs font-medium text-[var(--accent-main)] hover:underline inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-[var(--ink-wash)] transition-colors"
+              className="text-xs font-medium text-[var(--accent-main)] hover:underline inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-[var(--ink-wash)] transition-colors cursor-pointer"
             >
               <PlusCircle className="w-3.5 h-3.5" />
               <span>{isAddingStation ? 'Cancel' : 'Add custom URL'}</span>
@@ -280,12 +380,22 @@ export const SettingsModal: React.FC<Props> = ({
           {isAddingStation && (
             <form onSubmit={handleAddStationSubmit} className="p-4 rounded-2xl bg-[var(--ink-wash)] border border-[var(--border-hairline)] space-y-3">
               <div>
-                <label className="block text-[11px] font-medium text-[var(--text-muted)] mb-1">Station Title</label>
+                <label className="block text-[11px] font-medium text-[var(--text-muted)] mb-1 flex items-center justify-between">
+                  <span>Station Title</span>
+                  {isFetchingMeta && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-[var(--accent-main)]">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Fetching YouTube title...
+                    </span>
+                  )}
+                </label>
                 <input
+                  id="settings-station-name-input"
                   type="text"
                   placeholder="e.g. My Study Beats"
                   value={stationName}
-                  onChange={(e) => setStationName(e.target.value)}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  onPaste={handleTitlePaste}
                   className="w-full text-xs px-3.5 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-hairline)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-main)]"
                   required
                 />
@@ -296,7 +406,8 @@ export const SettingsModal: React.FC<Props> = ({
                   type="text"
                   placeholder="https://music.youtube.com/... or https://www.youtube.com/watch?v=..."
                   value={stationUrl}
-                  onChange={(e) => setStationUrl(e.target.value)}
+                  onChange={(e) => handleUrlChange(e.target.value)}
+                  onPaste={handleUrlPaste}
                   className="w-full text-xs px-3.5 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-hairline)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-main)]"
                   required
                 />
@@ -305,14 +416,14 @@ export const SettingsModal: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => setIsAddingStation(false)}
-                  className="px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                  className="px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingStation}
-                  className="px-4 py-1.5 rounded-xl bg-[var(--accent-main)] text-[var(--accent-fg)] text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors shadow-sm"
+                  className="px-4 py-1.5 rounded-xl bg-[var(--accent-main)] text-[var(--accent-fg)] text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors shadow-sm cursor-pointer"
                 >
                   {isSubmittingStation ? 'Adding...' : 'Save Station'}
                 </button>
@@ -370,8 +481,8 @@ export const SettingsModal: React.FC<Props> = ({
             })}
           </div>
 
-          {/* Soundtrack Volume Slider */}
-          <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[var(--ink-wash)] border border-[var(--border-hairline)]">
+          {/* Volume Control */}
+          <div className="flex items-center gap-3 pt-2">
             <Volume2 className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
             <div className="flex-1">
               <CalmSlider

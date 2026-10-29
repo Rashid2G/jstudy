@@ -2,6 +2,8 @@ import React from 'react';
 import { formatTime } from '../utils/format.js';
 import { TimerState, calculateProgress } from '../utils/timer.js';
 import { Play, Pause, RotateCcw, SkipForward } from 'lucide-react';
+import { extractYouTubeId, isYouTubeUrl } from '../utils/youtube.js';
+import { api } from '../services/api.js';
 
 interface Props {
   timerState: TimerState;
@@ -40,6 +42,22 @@ export const Timer: React.FC<Props> = ({
   const progressPercent = calculateProgress(totalDurationSeconds, remainingSeconds);
   const strokeDashoffset = circumference - (circumference * progressPercent) / 100;
 
+  const handleGoalPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text').trim();
+    if (isYouTubeUrl(text) || extractYouTubeId(text)) {
+      api
+        .getYouTubeMeta(text)
+        .then((meta) => {
+          if (meta?.title) {
+            onSessionGoalChange(meta.title);
+          }
+        })
+        .catch(() => {
+          // If errored, leave it as it is
+        });
+    }
+  };
+
   return (
     <section aria-label="Focus Timer" className="flex flex-col items-center justify-center w-full select-none">
       {/* Minimalist Study Intention */}
@@ -48,6 +66,7 @@ export const Timer: React.FC<Props> = ({
           type="text"
           value={sessionGoal}
           onChange={(e) => onSessionGoalChange(e.target.value)}
+          onPaste={handleGoalPaste}
           placeholder="Write your study intention..."
           aria-label="Study intention"
           className="w-full text-center text-sm bg-transparent text-[var(--text-main)] placeholder-[var(--text-faint)] py-1 border-b border-transparent hover:border-[var(--border-hairline)] focus:border-[var(--border-hairline)] focus:outline-none transition-colors select-text"
@@ -61,7 +80,7 @@ export const Timer: React.FC<Props> = ({
           <button
             type="button"
             onClick={onResetTimer}
-            className="group flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-[var(--border-hairline)] bg-[var(--ink-wash)] hover:bg-[var(--ink-wash-strong)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all text-xs font-medium active:scale-95 shadow-sm"
+            className="group flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-[var(--border-hairline)] bg-[var(--ink-wash)] hover:bg-[var(--ink-wash-strong)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all text-xs font-medium active:scale-95 shadow-sm cursor-pointer"
             title="Reset timer"
             aria-label="Reset timer"
           >
@@ -126,7 +145,7 @@ export const Timer: React.FC<Props> = ({
           <button
             type="button"
             onClick={onToggleTimer}
-            className="mt-2.5 px-7 py-1.5 rounded-full bg-[var(--accent-main)] text-[var(--accent-fg)] hover:bg-[var(--accent-hover)] transition-all active:scale-[0.97] inline-flex items-center gap-2 text-xs font-medium tracking-wide shadow-sm"
+            className="mt-2.5 px-7 py-1.5 rounded-full bg-[var(--accent-main)] text-[var(--accent-fg)] hover:bg-[var(--accent-hover)] transition-all active:scale-[0.97] inline-flex items-center gap-2 text-xs font-medium tracking-wide shadow-sm cursor-pointer"
             aria-label={isRunning ? 'Pause' : remainingSeconds < totalDurationSeconds ? 'Resume' : 'Start Session'}
           >
             {isRunning ? (
@@ -149,7 +168,7 @@ export const Timer: React.FC<Props> = ({
             <button
               type="button"
               onClick={onSkipPhase}
-              className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[var(--border-hairline)] bg-[var(--ink-wash)] hover:bg-[var(--ink-wash-strong)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all text-xs font-medium active:scale-95 shadow-sm"
+              className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[var(--border-hairline)] bg-[var(--ink-wash)] hover:bg-[var(--ink-wash-strong)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all text-xs font-medium active:scale-95 shadow-sm cursor-pointer"
               title={phase === 'work' ? 'Skip to break' : 'Skip to focus'}
               aria-label={phase === 'work' ? 'Skip to break' : 'Skip to focus'}
             >
@@ -163,7 +182,7 @@ export const Timer: React.FC<Props> = ({
           <span className="text-[10px] font-mono text-[var(--text-faint)] pl-1">
             {completedCycles > 0
               ? `${completedCycles} ${completedCycles === 1 ? 'cycle' : 'cycles'}`
-              : 'Ready'}
+              : 'Cycle 0'}
           </span>
         </div>
       </div>
