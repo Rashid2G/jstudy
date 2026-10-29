@@ -248,7 +248,7 @@ export function App() {
   return (
     <div
       data-focus-active={isSessionDimmed ? 'true' : 'false'}
-      className="h-screen max-h-screen flex flex-col font-sans bg-[var(--bg-canvas)] text-[var(--text-main)] transition-colors duration-500 overflow-hidden"
+      className="app-shell h-screen max-h-screen flex flex-col font-sans text-[var(--text-main)] transition-colors duration-500 overflow-hidden"
     >
       <Header
         currentTheme={currentTheme}
