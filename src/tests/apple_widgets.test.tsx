@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React, { act } from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { App } from '../App.js';
 
 beforeEach(() => {
@@ -264,6 +264,38 @@ describe('Apple Style Interactive Widgets Shelf', () => {
 
     // Appearance widget shows Theme and Dark badge
     expect(appearanceWidget.textContent).toContain('Dark');
+  });
+
+  it('toggles loop mode in Rhythm widget and controls required total duration', async () => {
+    await act(async () => {
+      render(<App />);
+    });
+
+    // Loop is ON by default
+    const widgetLoopToggle = screen.getByRole('switch', { name: /Loop Sessions/i });
+    expect(widgetLoopToggle).toBeDefined();
+    expect(widgetLoopToggle.getAttribute('aria-checked')).toBe('true');
+
+    // Turn Loop OFF
+    await act(async () => {
+      fireEvent.click(widgetLoopToggle);
+    });
+    expect(widgetLoopToggle.getAttribute('aria-checked')).toBe('false');
+
+    // Required Total Duration appears in widget
+    await waitFor(() => {
+      expect(screen.getByText(/Req/i)).toBeDefined();
+      expect(screen.getByText(/Default: 30m/i)).toBeDefined();
+    });
+
+    // Adjust total duration via widget button
+    const decBtn = screen.getByRole('button', { name: /Decrease total duration/i });
+    await act(async () => {
+      fireEvent.click(decBtn);
+    });
+
+    // 30m - 5m = 25m
+    expect(screen.getAllByText('25m').length).toBeGreaterThanOrEqual(1);
   });
 });
 

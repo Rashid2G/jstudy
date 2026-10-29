@@ -12,9 +12,19 @@ class SoundController {
       this.ctx = new AudioCtx();
     }
     if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
     return this.ctx;
+  }
+
+  async resumeContext(): Promise<void> {
+    if (this.ctx && this.ctx.state === 'suspended') {
+      try {
+        await this.ctx.resume();
+      } catch {
+        // ignore
+      }
+    }
   }
 
   // Plays an uplifting resonant tone when the timer starts (plays for at least 2 seconds)
@@ -109,6 +119,12 @@ class SoundController {
   startAmbient(type: string, volume: number = 0.4): void {
     if (type === 'none' || volume <= 0) {
       this.stopAmbient();
+      return;
+    }
+
+    // If the same ambient type is already active, smoothly update volume without re-synthesizing
+    if (this.currentAmbientType === type && this.ambientSource) {
+      this.setAmbientVolume(volume);
       return;
     }
 

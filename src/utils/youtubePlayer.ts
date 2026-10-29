@@ -40,7 +40,7 @@ class YouTubeAudioController {
       const timeout = window.setTimeout(() => {
         this.apiLoadingPromise = null;
         reject(new Error('YouTube IFrame API load timeout'));
-      }, 8000);
+      }, 10000);
 
       window.onYouTubeIframeAPIReady = () => {
         window.clearTimeout(timeout);
@@ -71,23 +71,48 @@ class YouTubeAudioController {
       host = document.createElement('div');
       host.id = 'studinty-yt-audio-host';
       host.setAttribute('aria-hidden', 'true');
+      // Offscreen container with standard size so modern browsers (Chromium/WebKit)
+      // do not throttle audio decoding as a 1x1 zero-opacity hidden frame
       Object.assign(host.style, {
         position: 'fixed',
-        bottom: '0px',
-        right: '0px',
-        width: '1px',
-        height: '1px',
-        opacity: '0.001',
+        left: '-9999px',
+        top: '-9999px',
+        width: '200px',
+        height: '200px',
+        opacity: '1',
         pointerEvents: 'none',
         overflow: 'hidden',
         zIndex: '-1',
       });
-      const target = document.createElement('div');
-      target.id = 'studinty-yt-audio-player';
-      host.appendChild(target);
       document.body.appendChild(host);
     }
+    let target = document.getElementById('studinty-yt-audio-player');
+    if (!target) {
+      target = document.createElement('div');
+      target.id = 'studinty-yt-audio-player';
+      host.appendChild(target);
+    }
     return host;
+  }
+
+  reset(): void {
+    this.pendingPlayVideoId = null;
+    this.isReady = false;
+    if (this.player) {
+      try {
+        if (typeof this.player.destroy === 'function') {
+          this.player.destroy();
+        }
+      } catch {
+        // ignore
+      }
+      this.player = null;
+    }
+    this.currentVideoId = null;
+    const host = document.getElementById('studinty-yt-audio-host');
+    if (host) {
+      host.innerHTML = '<div id="studinty-yt-audio-player"></div>';
+    }
   }
 
   async play(videoId: string, volume0to1: number, muted: boolean, callbacks: YouTubeCallbacks): Promise<void> {
@@ -106,14 +131,30 @@ class YouTubeAudioController {
     this.ensureContainer();
 
     if (this.player && this.isReady) {
-      if (this.currentVideoId !== videoId) {
-        this.currentVideoId = videoId;
-        this.player.loadVideoById({ videoId, suggestedQuality: 'small' });
-      } else {
-        this.player.playVideo();
+      try {
+        this.applyVolume();
+        if (this.currentVideoId !== videoId) {
+          this.currentVideoId = videoId;
+          this.player.loadVideoById({ videoId, suggestedQuality: 'small' });
+        } else {
+          const state =
+            typeof this.player.getPlayerState === 'function' ? this.player.getPlayerState() : -1;
+          if (state === 1) {
+            // Already playing
+            return;
+          }
+          if (state === 5 || state === -1 || state === 0) {
+            // Cued, unstarted, or ended
+            this.player.loadVideoById({ videoId, suggestedQuality: 'small' });
+          } else {
+            this.player.playVideo();
+          }
+        }
+        return;
+      } catch (err) {
+        console.warn('Error commanding existing YouTube player, recreating:', err);
+        this.reset();
       }
-      this.applyVolume();
-      return;
     }
 
     if (this.player && !this.isReady) {
@@ -122,58 +163,65 @@ class YouTubeAudioController {
     }
 
     this.currentVideoId = videoId;
-    this.player = new window.YT.Player('studinty-yt-audio-player', {
-      height: '1',
-      width: '1',
-      videoId,
-      playerVars: {
-        autoplay: 1,
-        controls: 0,
-        disablekb: 1,
-        fs: 0,
-        iv_load_policy: 3,
-        modestbranding: 1,
-        playsinline: 1,
-        rel: 0,
-      },
-      events: {
-        onReady: () => {
-          this.isReady = true;
-          this.applyVolume();
-          if (this.pendingPlayVideoId) {
-            if (this.pendingPlayVideoId !== this.currentVideoId) {
-              this.currentVideoId = this.pendingPlayVideoId;
-              this.player.loadVideoById({ videoId: this.pendingPlayVideoId, suggestedQuality: 'small' });
-            } else {
-              this.player.playVideo();
-            }
-          }
+    try {
+      this.player = new window.YT.Player('studinty-yt-audio-player', {
+        height: '200',
+        width: '200',
+        videoId,
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          iv_load_policy: 3,
+          modestbranding: 1,
+          playsinline: 1,
+          rel: 0,
         },
-        onStateChange: (event: any) => {
-          const YTState = window.YT?.PlayerState;
-          if (!YTState) return;
-          if (event.data === YTState.PLAYING) {
+        events: {
+          onReady: () => {
+            this.isReady = true;
             this.applyVolume();
-            this.callbacks.onPlaying?.();
-          } else if (event.data === YTState.BUFFERING) {
-            this.callbacks.onBuffering?.();
-          } else if (event.data === YTState.PAUSED) {
-            this.callbacks.onPaused?.();
-          } else if (event.data === YTState.ENDED) {
-            // Seamlessly loop finished study tracks
-            try {
-              this.player.seekTo(0, true);
-              this.player.playVideo();
-            } catch {
-              // ignore
+            if (this.pendingPlayVideoId) {
+              const targetVid = this.pendingPlayVideoId;
+              this.currentVideoId = targetVid;
+              try {
+                this.player.loadVideoById({ videoId: targetVid, suggestedQuality: 'small' });
+              } catch {
+                this.player.playVideo();
+              }
             }
-          }
+          },
+          onStateChange: (event: any) => {
+            const YTState = window.YT?.PlayerState;
+            if (!YTState) return;
+            if (event.data === YTState.PLAYING) {
+              this.applyVolume();
+              this.callbacks.onPlaying?.();
+            } else if (event.data === YTState.BUFFERING) {
+              this.callbacks.onBuffering?.();
+            } else if (event.data === YTState.PAUSED) {
+              this.callbacks.onPaused?.();
+            } else if (event.data === YTState.ENDED) {
+              // Seamlessly loop finished study tracks
+              try {
+                this.player.seekTo(0, true);
+                this.player.playVideo();
+              } catch {
+                // ignore
+              }
+            }
+          },
+          onError: (event: any) => {
+            console.warn('YouTube embed error event:', event?.data);
+            this.callbacks.onFallbackNeeded?.(`YouTube embed error ${event?.data ?? 'unknown'}`);
+          },
         },
-        onError: (event: any) => {
-          this.callbacks.onFallbackNeeded?.(`YouTube embed error ${event?.data ?? 'unknown'}`);
-        },
-      },
-    });
+      });
+    } catch (err: any) {
+      console.warn('Could not initialize YouTube player instance:', err);
+      this.callbacks.onFallbackNeeded?.(err?.message || 'Failed to instantiate YT Player');
+    }
   }
 
   pause(): void {
@@ -191,7 +239,7 @@ class YouTubeAudioController {
     this.pendingPlayVideoId = null;
     if (this.player && this.isReady) {
       try {
-        this.player.stopVideo();
+        this.player.pauseVideo();
       } catch {
         // ignore
       }

@@ -12,6 +12,8 @@ interface Props {
     workMinutes?: number;
     breakMinutes?: number;
     breaksEnabled?: boolean;
+    loopEnabled?: boolean;
+    totalSessionMinutes?: number;
   }) => void;
   stations: RadioStation[];
   currentStationId: string | null;
@@ -78,7 +80,7 @@ export const AppleWidgetsShelf: React.FC<Props> = ({
   };
 
   const isAnyExpanded = activeWidget !== null;
-  const containerHeight = isAnyExpanded ? 336 : 164;
+  const containerHeight = isAnyExpanded ? (activeWidget === 'rhythm' ? 388 : 336) : 164;
 
   // Inward expanding coordinates:
   // Top-Left (Rhythm) & Top-Right (Soundtrack) expand down into row 2
@@ -127,7 +129,7 @@ export const AppleWidgetsShelf: React.FC<Props> = ({
     <section
       role="region"
       aria-label="Apple Control Widgets"
-      className="focus-dimmable w-full max-w-2xl mx-auto mt-3 sm:mt-4 px-1 select-none"
+      className="focus-dimmable w-full max-w-2xl mx-auto mt-8 sm:mt-10 md:mt-12 px-1 select-none"
       onMouseLeave={handleMouseLeave}
     >
       <div
@@ -202,7 +204,7 @@ export const AppleWidgetsShelf: React.FC<Props> = ({
           }}
         />
 
-        {/* Quadrant 4: Bottom-Right — Appearance & Themes (Expands Up & Left) */}
+        {/* Quadrant 4: Bottom-Right — Visual Appearance (Expands Up & Left) */}
         <AppearanceWidget
           currentTheme={currentTheme}
           onSelectTheme={onSelectTheme}

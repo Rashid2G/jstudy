@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { RadioStation, AmbientSoundType } from '../types/index.js';
 import { extractYouTubeId, isYouTubeUrl } from '../utils/youtube.js';
 import { isSpotifyUrl } from '../utils/spotify.js';
@@ -42,6 +42,22 @@ export const SoundtrackEngine: React.FC<Props> = ({
 
   const activeStation = stations.find((s) => s.id === currentStationId) || stations[0];
 
+  // Up-to-date refs to prevent stale closure bugs during user gesture / async callbacks
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+
+  const activeStationRef = useRef<RadioStation | undefined>(activeStation);
+  activeStationRef.current = activeStation;
+
+  const radioVolumeRef = useRef(radioVolume);
+  radioVolumeRef.current = radioVolume;
+
+  const ambientSoundRef = useRef(ambientSound);
+  ambientSoundRef.current = ambientSound;
+
+  const ambientVolumeRef = useRef(ambientVolume);
+  ambientVolumeRef.current = ambientVolume;
+
   const closeActiveHistory = () => {
     if (currentHistoryIdRef.current && playStartTimeRef.current) {
       const elapsed = Math.max(1, Math.round((Date.now() - playStartTimeRef.current) / 1000));
@@ -71,12 +87,14 @@ export const SoundtrackEngine: React.FC<Props> = ({
     }
   };
 
-  const stopAllEngines = () => {
+  const stopHtmlAudio = () => {
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.removeAttribute('src');
-      audioRef.current.load();
     }
+  };
+
+  const stopAllEngines = () => {
+    stopHtmlAudio();
     youtubeAudio.pause();
     spotifyAudio.pause();
     spotifyAudio.setVisible(false);
@@ -86,13 +104,44 @@ export const SoundtrackEngine: React.FC<Props> = ({
     engineRef.current = 'none';
   };
 
-  const startPlayback = (station: RadioStation) => {
-    stopAllEngines();
+  const handleAutoplayBlocked = useCallback(() => {
+    if (userGesturePendingRef.current) return;
+    userGesturePendingRef.current = true;
 
+    const onUserGesture = () => {
+      userGesturePendingRef.current = false;
+      window.removeEventListener('pointerdown', onUserGesture);
+      window.removeEventListener('keydown', onUserGesture);
+      window.removeEventListener('click', onUserGesture);
+      window.removeEventListener('touchstart', onUserGesture);
+
+      // Revive suspended Web Audio context if necessary
+      sound.resumeContext();
+
+      if (isPlayingRef.current && activeStationRef.current) {
+        startPlayback(activeStationRef.current);
+        if (
+          ambientSoundRef.current !== 'none' &&
+          activeStationRef.current.stream_type !== 'ambient'
+        ) {
+          sound.startAmbient(ambientSoundRef.current, ambientVolumeRef.current);
+        }
+      }
+    };
+
+    window.addEventListener('pointerdown', onUserGesture, { once: true });
+    window.addEventListener('keydown', onUserGesture, { once: true });
+    window.addEventListener('click', onUserGesture, { once: true });
+    window.addEventListener('touchstart', onUserGesture, { once: true });
+  }, []);
+
+  const startPlayback = (station: RadioStation) => {
     // 1. Synthesized ambient station
     if (station.stream_type === 'ambient' || station.url.startsWith('ambient:')) {
+      stopHtmlAudio();
+      youtubeAudio.pause();
       const ambType = station.url.replace('ambient:', '') || 'rain';
-      sound.startAmbient(ambType, radioVolume);
+      sound.startAmbient(ambType, radioVolumeRef.current);
       engineRef.current = 'synth-ambient';
       openNewHistory(station);
       return;
@@ -118,47 +167,43 @@ export const SoundtrackEngine: React.FC<Props> = ({
     // 3. YouTube audio
     const ytId = extractYouTubeId(station.url);
     if (ytId || station.stream_type === 'youtube' || isYouTubeUrl(station.url)) {
-      const fallbackToBackendStream = () => {
-        if (!audioRef.current) return;
-        engineRef.current = 'youtube-stream';
-        audioRef.current.src = api.getYouTubeAudioStreamUrl(station.url);
-        audioRef.current.volume = radioVolume;
-        audioRef.current
-          .play()
-          .then(() => {
-            openNewHistory(station);
-          })
-          .catch((err) => {
-            console.warn('Backend stream play failed:', err);
-            handleAutoplayBlocked();
-          });
-      };
+      stopHtmlAudio();
+      if (engineRef.current === 'synth-ambient') {
+        sound.stopAmbient();
+      }
 
       if (!ytId) {
-        fallbackToBackendStream();
+        console.warn('Unable to extract YouTube video ID from:', station.url);
         return;
       }
 
       engineRef.current = 'youtube-iframe';
-      youtubeAudio.play(ytId, radioVolume, false, {
+      youtubeAudio.play(ytId, radioVolumeRef.current, false, {
         onPlaying: () => {
           if (!currentHistoryIdRef.current) {
             openNewHistory(station);
           }
         },
-        onFallbackNeeded: () => {
-          youtubeAudio.stop();
-          fallbackToBackendStream();
+        onFallbackNeeded: (reason) => {
+          console.warn('YouTube audio blocked or fallback needed:', reason);
+          handleAutoplayBlocked();
         },
       });
       return;
     }
 
-    // 4. HTML5 Audio stream (MP3, Icecast)
+    // HTML5 Audio stream (MP3, Icecast)
+    youtubeAudio.pause();
+    spotifyAudio.pause();
+    if (engineRef.current === 'synth-ambient') {
+      sound.stopAmbient();
+    }
     if (!audioRef.current) return;
     engineRef.current = 'html-audio';
-    audioRef.current.src = station.url;
-    audioRef.current.volume = radioVolume;
+    if (audioRef.current.src !== station.url) {
+      audioRef.current.src = station.url;
+    }
+    audioRef.current.volume = radioVolumeRef.current;
     audioRef.current
       .play()
       .then(() => {
@@ -170,30 +215,11 @@ export const SoundtrackEngine: React.FC<Props> = ({
       });
   };
 
-  const handleAutoplayBlocked = () => {
-    if (userGesturePendingRef.current) return;
-    userGesturePendingRef.current = true;
-
-    const onUserGesture = () => {
-      userGesturePendingRef.current = false;
-      window.removeEventListener('pointerdown', onUserGesture);
-      window.removeEventListener('keydown', onUserGesture);
-
-      if (isPlaying && activeStation) {
-        startPlayback(activeStation);
-      }
-    };
-
-    window.addEventListener('pointerdown', onUserGesture, { once: true });
-    window.addEventListener('keydown', onUserGesture, { once: true });
-  };
-
   // Main sync effect: when isPlaying or activeStation changes
   useEffect(() => {
     if (isPlaying && activeStation) {
       startPlayback(activeStation);
 
-      // Start ambient background sound if configured (and not already synth ambient)
       if (ambientSound !== 'none' && activeStation.stream_type !== 'ambient') {
         sound.startAmbient(ambientSound, ambientVolume);
       }
@@ -206,7 +232,6 @@ export const SoundtrackEngine: React.FC<Props> = ({
     }
 
     return () => {
-      // Component unmount or station switch
       closeActiveHistory();
       stopAllEngines();
       sound.stopAmbient();
@@ -234,7 +259,7 @@ export const SoundtrackEngine: React.FC<Props> = ({
         sound.stopAmbient();
       }
     }
-  }, [ambientSound, ambientVolume, isPlaying, activeStation]);
+  }, [ambientSound, ambientVolume, isPlaying, activeStation?.id]);
 
   return (
     <audio
