@@ -1,7 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { RadioStation, AmbientSoundType } from '../types/index.js';
 import { extractYouTubeId, isYouTubeUrl } from '../utils/youtube.js';
+import { isSpotifyUrl } from '../utils/spotify.js';
 import { youtubeAudio } from '../utils/youtubePlayer.js';
+import { spotifyAudio } from '../utils/spotifyPlayer.js';
 import { sound } from '../utils/sound.js';
 import { api } from '../services/api.js';
 
@@ -15,7 +17,13 @@ interface Props {
   onHistoryUpdated?: () => void;
 }
 
-type ActiveEngine = 'none' | 'html-audio' | 'youtube-iframe' | 'youtube-stream' | 'synth-ambient';
+type ActiveEngine =
+  | 'none'
+  | 'html-audio'
+  | 'youtube-iframe'
+  | 'youtube-stream'
+  | 'synth-ambient'
+  | 'spotify-iframe';
 
 export const SoundtrackEngine: React.FC<Props> = ({
   stations,
@@ -70,6 +78,8 @@ export const SoundtrackEngine: React.FC<Props> = ({
       audioRef.current.load();
     }
     youtubeAudio.pause();
+    spotifyAudio.pause();
+    spotifyAudio.setVisible(false);
     if (engineRef.current === 'synth-ambient') {
       sound.stopAmbient();
     }
@@ -88,7 +98,24 @@ export const SoundtrackEngine: React.FC<Props> = ({
       return;
     }
 
-    // 2. YouTube audio
+    // 2. Spotify audio stream
+    if (station.stream_type === 'spotify' || isSpotifyUrl(station.url)) {
+      engineRef.current = 'spotify-iframe';
+      spotifyAudio.play(station.url, {
+        onPlaying: () => {
+          if (!currentHistoryIdRef.current) {
+            openNewHistory(station);
+          }
+        },
+        onError: (err) => {
+          console.warn('Spotify play failed:', err);
+          handleAutoplayBlocked();
+        },
+      });
+      return;
+    }
+
+    // 3. YouTube audio
     const ytId = extractYouTubeId(station.url);
     if (ytId || station.stream_type === 'youtube' || isYouTubeUrl(station.url)) {
       const fallbackToBackendStream = () => {
@@ -127,7 +154,7 @@ export const SoundtrackEngine: React.FC<Props> = ({
       return;
     }
 
-    // 3. HTML5 Audio stream (MP3, Icecast)
+    // 4. HTML5 Audio stream (MP3, Icecast)
     if (!audioRef.current) return;
     engineRef.current = 'html-audio';
     audioRef.current.src = station.url;

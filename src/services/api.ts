@@ -5,6 +5,7 @@ import {
   PlayHistoryItem,
   DashboardStats,
   YouTubeMetadata,
+  SpotifyMetadata,
 } from '../types/index.js';
 import { localStudyStorage } from './storage.js';
 
@@ -61,6 +62,11 @@ export const api = {
   // --- YouTube Metadata & Audio Fallback ---
   async getYouTubeMeta(url: string): Promise<YouTubeMetadata> {
     return localStudyStorage.getYouTubeMeta(url);
+  },
+
+  // --- Spotify Metadata ---
+  async getSpotifyMeta(url: string): Promise<SpotifyMetadata> {
+    return localStudyStorage.getSpotifyMeta(url);
   },
 
   getYouTubeAudioStreamUrl(url: string): string {

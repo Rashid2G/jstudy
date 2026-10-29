@@ -6,7 +6,7 @@ export type TimerMode = 'pomodoro' | 'custom' | 'continuous';
 
 export type AmbientSoundType = 'none' | 'rain' | 'fireplace' | 'cafe' | 'waves' | 'whitenoise';
 
-export type StreamType = 'audio' | 'youtube' | 'ambient';
+export type StreamType = 'audio' | 'youtube' | 'ambient' | 'spotify';
 
 export interface Room {
   id: string;
@@ -71,4 +71,11 @@ export interface YouTubeMetadata {
   videoId: string;
   title: string;
   author: string;
+}
+
+export interface SpotifyMetadata {
+  uri: string;
+  title: string;
+  author: string;
+  thumbnail?: string;
 }
