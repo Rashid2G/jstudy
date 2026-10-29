@@ -10,6 +10,7 @@ describe('Room configuration logic', () => {
       theme: 'sage',
       timer_work_minutes: 50,
       timer_break_minutes: 10,
+      breaks_enabled: 1,
       timer_mode: 'pomodoro',
       default_radio_id: 'radio-drone-zone',
       ambient_sound: 'rain',
@@ -21,12 +22,13 @@ describe('Room configuration logic', () => {
     {
       id: 'room-2',
       name: 'Coffee Shop Flow',
-      description: 'Cozy cafe vibes',
+      description: 'Cozy cafe continuous session',
       theme: 'sand',
-      timer_work_minutes: 25,
-      timer_break_minutes: 5,
-      timer_mode: 'pomodoro',
-      default_radio_id: 'radio-nightwave',
+      timer_work_minutes: 45,
+      timer_break_minutes: 0,
+      breaks_enabled: 0,
+      timer_mode: 'continuous',
+      default_radio_id: 'radio-yt-chillhop',
       ambient_sound: 'cafe',
       ambient_volume: 0.4,
       radio_volume: 0.8,
@@ -35,12 +37,13 @@ describe('Room configuration logic', () => {
     },
   ];
 
-  it('correctly finds and resolves room settings by id', () => {
+  it('correctly finds and resolves room settings including break toggle', () => {
     const selected = sampleRooms.find((r) => r.id === 'room-2');
     expect(selected).toBeDefined();
     expect(selected?.theme).toBe('sand');
-    expect(selected?.timer_work_minutes).toBe(25);
-    expect(selected?.ambient_sound).toBe('cafe');
+    expect(selected?.timer_work_minutes).toBe(45);
+    expect(selected?.breaks_enabled).toBe(0);
+    expect(selected?.timer_mode).toBe('continuous');
   });
 
   it('falls back safely when room id is missing', () => {
@@ -51,11 +54,11 @@ describe('Room configuration logic', () => {
 
   it('validates custom room minutes constraints', () => {
     const rawWorkMinutes = -10;
-    const clampedWork = Math.max(1, Math.min(180, rawWorkMinutes || 25));
+    const clampedWork = Math.max(1, Math.min(240, rawWorkMinutes || 25));
     expect(clampedWork).toBe(1);
 
     const highWork = 300;
-    const clampedHigh = Math.max(1, Math.min(180, highWork || 25));
-    expect(clampedHigh).toBe(180);
+    const clampedHigh = Math.max(1, Math.min(240, highWork || 25));
+    expect(clampedHigh).toBe(240);
   });
 });

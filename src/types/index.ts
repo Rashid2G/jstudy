@@ -1,6 +1,8 @@
 export type CalmTheme = 'sage' | 'sand' | 'slate' | 'dusk' | 'nordic';
 
-export type TimerMode = 'pomodoro' | 'custom' | 'stopwatch';
+export type ColorMode = 'light' | 'dark';
+
+export type TimerMode = 'pomodoro' | 'custom' | 'continuous';
 
 export type AmbientSoundType = 'none' | 'rain' | 'fireplace' | 'cafe' | 'waves' | 'whitenoise';
 
@@ -13,6 +15,7 @@ export interface Room {
   theme: CalmTheme;
   timer_work_minutes: number;
   timer_break_minutes: number;
+  breaks_enabled: number; // 1 = breaks on, 0 = continuous session without breaks
   timer_mode: TimerMode;
   default_radio_id: string | null;
   ambient_sound: AmbientSoundType;
@@ -62,4 +65,10 @@ export interface DashboardStats {
   completedSessionsCount: number;
   activeStreakDays: number;
   todayFocusSeconds: number;
+}
+
+export interface YouTubeMetadata {
+  videoId: string;
+  title: string;
+  author: string;
 }

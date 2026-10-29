@@ -2,124 +2,218 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg-main: #f5f4ef;
-  --bg-card: #ffffff;
-  --bg-card-subtle: #eeece5;
-  --border-subtle: #e2dfd5;
-  --text-main: #2b2823;
-  --text-muted: #797468;
-  --accent-main: #556b5b;
-  --accent-soft: #e3ebe5;
-  --accent-hover: #445649;
-}
+/* =========================================================
+   Calm Matte Palettes — Light & Dark Modes
+   ========================================================= */
 
-body.theme-sage {
-  --bg-main: #f3f6f3;
-  --bg-card: #ffffff;
-  --bg-card-subtle: #e8ede8;
-  --border-subtle: #dbe4dc;
+:root,
+html[data-theme="sage"] {
+  --bg-canvas: #f2f4f0;
+  --bg-elevated: #f8f9f6;
+  --ink-wash: rgba(34, 46, 37, 0.05);
+  --ink-wash-strong: rgba(34, 46, 37, 0.09);
+  --border-hairline: rgba(34, 46, 37, 0.10);
   --text-main: #222b24;
-  --text-muted: #647567;
-  --accent-main: #4a6750;
-  --accent-soft: #e2ede4;
-  --accent-hover: #3b5340;
+  --text-muted: #627065;
+  --text-faint: #8b988e;
+  --accent-main: #4a6650;
+  --accent-hover: #3d5542;
+  --accent-fg: #f6f8f6;
+  --accent-aura: rgba(74, 102, 80, 0.14);
 }
 
-body.theme-sand {
-  --bg-main: #f7f4ee;
-  --bg-card: #ffffff;
-  --bg-card-subtle: #eee7dc;
-  --border-subtle: #e0d7c7;
-  --text-main: #332a21;
-  --text-muted: #7d6e5e;
-  --accent-main: #8c6e4e;
-  --accent-soft: #f4ecdf;
-  --accent-hover: #73593d;
+html.dark[data-theme="sage"],
+html.dark {
+  --bg-canvas: #131714;
+  --bg-elevated: #1a1f1b;
+  --ink-wash: rgba(218, 228, 220, 0.05);
+  --ink-wash-strong: rgba(218, 228, 220, 0.09);
+  --border-hairline: rgba(218, 228, 220, 0.09);
+  --text-main: #dde4df;
+  --text-muted: #8a998e;
+  --text-faint: #5e6b61;
+  --accent-main: #7c9c82;
+  --accent-hover: #8fad95;
+  --accent-fg: #111612;
+  --accent-aura: rgba(124, 156, 130, 0.14);
 }
 
-body.theme-slate {
-  --bg-main: #f4f5f7;
-  --bg-card: #ffffff;
-  --bg-card-subtle: #e8ebf0;
-  --border-subtle: #dbe0e8;
-  --text-main: #21262d;
-  --text-muted: #626d7a;
-  --accent-main: #4f5f73;
-  --accent-soft: #e5ebf2;
-  --accent-hover: #3d4a5b;
+/* Sand / Warm Oat */
+html[data-theme="sand"] {
+  --bg-canvas: #f5f1ea;
+  --bg-elevated: #faf7f2;
+  --ink-wash: rgba(52, 41, 30, 0.05);
+  --ink-wash-strong: rgba(52, 41, 30, 0.09);
+  --border-hairline: rgba(52, 41, 30, 0.10);
+  --text-main: #2f271f;
+  --text-muted: #786a5c;
+  --text-faint: #9e9082;
+  --accent-main: #84684d;
+  --accent-hover: #6f573f;
+  --accent-fg: #faf7f2;
+  --accent-aura: rgba(132, 104, 77, 0.14);
 }
 
-body.theme-dusk {
-  --bg-main: #18171e;
-  --bg-card: #201e28;
-  --bg-card-subtle: #292734;
-  --border-subtle: #363345;
-  --text-main: #eceaf2;
-  --text-muted: #9691a6;
-  --accent-main: #9e8cb8;
-  --accent-soft: #2e283d;
-  --accent-hover: #b4a3ce;
+html.dark[data-theme="sand"] {
+  --bg-canvas: #171411;
+  --bg-elevated: #201c18;
+  --ink-wash: rgba(235, 225, 212, 0.05);
+  --ink-wash-strong: rgba(235, 225, 212, 0.09);
+  --border-hairline: rgba(235, 225, 212, 0.09);
+  --text-main: #e6dfd5;
+  --text-muted: #9c8f80;
+  --text-faint: #6b6156;
+  --accent-main: #b59779;
+  --accent-hover: #c5a98c;
+  --accent-fg: #181410;
+  --accent-aura: rgba(181, 151, 121, 0.14);
 }
 
-body.theme-nordic {
-  --bg-main: #f6f6f6;
-  --bg-card: #ffffff;
-  --bg-card-subtle: #ececec;
-  --border-subtle: #dedede;
-  --text-main: #1f1f1f;
-  --text-muted: #6e6e6e;
-  --accent-main: #3d3d3d;
-  --accent-soft: #e8e8e8;
-  --accent-hover: #242424;
+/* Slate Mist */
+html[data-theme="slate"] {
+  --bg-canvas: #f1f3f6;
+  --bg-elevated: #f7f9fb;
+  --ink-wash: rgba(31, 40, 51, 0.05);
+  --ink-wash-strong: rgba(31, 40, 51, 0.09);
+  --border-hairline: rgba(31, 40, 51, 0.10);
+  --text-main: #20262e;
+  --text-muted: #616d7c;
+  --text-faint: #8c97a6;
+  --accent-main: #4e6175;
+  --accent-hover: #3e4e5f;
+  --accent-fg: #f6f8fa;
+  --accent-aura: rgba(78, 97, 117, 0.14);
 }
 
+html.dark[data-theme="slate"] {
+  --bg-canvas: #12151a;
+  --bg-elevated: #191d24;
+  --ink-wash: rgba(215, 224, 236, 0.05);
+  --ink-wash-strong: rgba(215, 224, 236, 0.09);
+  --border-hairline: rgba(215, 224, 236, 0.09);
+  --text-main: #dce2ea;
+  --text-muted: #8693a3;
+  --text-faint: #586371;
+  --accent-main: #849bb3;
+  --accent-hover: #97adc4;
+  --accent-fg: #11151a;
+  --accent-aura: rgba(132, 155, 179, 0.14);
+}
+
+/* Dusk / Soft Twilight */
+html[data-theme="dusk"] {
+  --bg-canvas: #f3f1f6;
+  --bg-elevated: #f9f8fb;
+  --ink-wash: rgba(42, 34, 54, 0.05);
+  --ink-wash-strong: rgba(42, 34, 54, 0.09);
+  --border-hairline: rgba(42, 34, 54, 0.10);
+  --text-main: #282231;
+  --text-muted: #6d647c;
+  --text-faint: #968da5;
+  --accent-main: #68587e;
+  --accent-hover: #564869;
+  --accent-fg: #f8f6fb;
+  --accent-aura: rgba(104, 88, 126, 0.14);
+}
+
+html.dark[data-theme="dusk"] {
+  --bg-canvas: #141219;
+  --bg-elevated: #1c1923;
+  --ink-wash: rgba(226, 220, 238, 0.05);
+  --ink-wash-strong: rgba(226, 220, 238, 0.09);
+  --border-hairline: rgba(226, 220, 238, 0.09);
+  --text-main: #e3dfec;
+  --text-muted: #938ba4;
+  --text-faint: #625b72;
+  --accent-main: #9d8cb8;
+  --accent-hover: #b0a0ca;
+  --accent-fg: #15121b;
+  --accent-aura: rgba(157, 140, 184, 0.15);
+}
+
+/* Nordic Paper */
+html[data-theme="nordic"] {
+  --bg-canvas: #f3f3f1;
+  --bg-elevated: #f9f9f8;
+  --ink-wash: rgba(32, 32, 30, 0.05);
+  --ink-wash-strong: rgba(32, 32, 30, 0.09);
+  --border-hairline: rgba(32, 32, 30, 0.10);
+  --text-main: #20201f;
+  --text-muted: #686865;
+  --text-faint: #949490;
+  --accent-main: #424240;
+  --accent-hover: #2d2d2b;
+  --accent-fg: #f7f7f6;
+  --accent-aura: rgba(66, 66, 64, 0.12);
+}
+
+html.dark[data-theme="nordic"] {
+  --bg-canvas: #141413;
+  --bg-elevated: #1c1c1b;
+  --ink-wash: rgba(230, 230, 226, 0.05);
+  --ink-wash-strong: rgba(230, 230, 226, 0.09);
+  --border-hairline: rgba(230, 230, 226, 0.09);
+  --text-main: #e3e3e0;
+  --text-muted: #8e8e8a;
+  --text-faint: #5e5e5a;
+  --accent-main: #a8a8a2;
+  --accent-hover: #bcbcb6;
+  --accent-fg: #141413;
+  --accent-aura: rgba(168, 168, 162, 0.13);
+}
+
+html,
 body {
-  background-color: var(--bg-main);
+  background-color: var(--bg-canvas);
   color: var(--text-main);
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.4s ease, color 0.4s ease;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-/* Custom minimal slider */
-input[type=range] {
+/* =========================================================
+   Session Focus Dimming:
+   Dims everything smoothly except the active timer!
+   ========================================================= */
+.focus-dimmable {
+  opacity: 1;
+  filter: saturate(1);
+  transition: opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1), filter 0.65s ease;
+}
+
+[data-focus-active="true"] .focus-dimmable {
+  opacity: 0.14;
+  filter: saturate(0.6);
+}
+
+[data-focus-active="true"] .focus-dimmable:hover,
+[data-focus-active="true"] .focus-dimmable:focus-within {
+  opacity: 0.88;
+  filter: saturate(1);
+}
+
+/* =========================================================
+   Clean Scrollbars & Inputs
+   ========================================================= */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
-  background: transparent;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
 }
 
-input[type=range]::-webkit-slider-runnable-track {
-  width: 100%;
-  height: 4px;
-  background: var(--border-subtle);
-  border-radius: 9999px;
-}
-
-input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  height: 14px;
-  width: 14px;
-  border-radius: 50%;
-  background: var(--accent-main);
-  cursor: pointer;
-  margin-top: -5px;
-  transition: transform 0.1s ease;
-}
-
-input[type=range]::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-}
-
-/* Minimal smooth scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
-  border-radius: 3px;
+  background: var(--border-hairline);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: var(--text-faint);
 }

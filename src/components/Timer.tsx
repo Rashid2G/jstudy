@@ -1,285 +1,317 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { formatTime, formatDuration } from '../utils/format.js';
-import { sound } from '../utils/sound.js';
-import { api } from '../services/api.js';
-import { Play, Pause, RotateCcw, SkipForward, CheckCircle2, BookOpen } from 'lucide-react';
+import React from 'react';
+import { formatTime } from '../utils/format.js';
+import { TimerState, calculateProgress } from '../utils/timer.js';
+import { CalmSwitch } from './ui.js';
+import { Play, Pause, RotateCcw, SkipForward, Minus, Plus, Check } from 'lucide-react';
 
 interface Props {
-  workMinutes: number;
-  breakMinutes: number;
-  activeRoomId: string | null;
-  onSessionComplete?: () => void;
-  onZenModeRequest?: () => void;
+  timerState: TimerState;
+  sessionGoal: string;
+  onSessionGoalChange: (goal: string) => void;
+  onToggleTimer: () => void;
+  onResetTimer: () => void;
+  onSkipPhase: () => void;
+  onConfigureTimer: (updates: {
+    workMinutes?: number;
+    breakMinutes?: number;
+    breaksEnabled?: boolean;
+  }) => void;
+  hasUnsavedRoomChanges?: boolean;
+  onSaveTimerToRoom?: () => void;
 }
 
+const QUICK_PRESETS = [
+  { label: '25 / 5', work: 25, brk: 5, breaks: true },
+  { label: '50 / 10', work: 50, brk: 10, breaks: true },
+  { label: '90 / 15', work: 90, brk: 15, breaks: true },
+  { label: '45m flow', work: 45, brk: 0, breaks: false },
+];
+
 export const Timer: React.FC<Props> = ({
-  workMinutes,
-  breakMinutes,
-  activeRoomId,
-  onSessionComplete,
+  timerState,
+  sessionGoal,
+  onSessionGoalChange,
+  onToggleTimer,
+  onResetTimer,
+  onSkipPhase,
+  onConfigureTimer,
+  hasUnsavedRoomChanges,
+  onSaveTimerToRoom,
 }) => {
-  const [phase, setPhase] = useState<'work' | 'break'>('work');
-  const [remainingSeconds, setRemainingSeconds] = useState<number>(workMinutes * 60);
-  const [totalSeconds, setTotalSeconds] = useState<number>(workMinutes * 60);
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [completedSessionsCount, setCompletedSessionsCount] = useState<number>(0);
-  const [sessionGoal, setSessionGoal] = useState<string>('');
-  const [sessionNotes, setSessionNotes] = useState<string>('');
-  const [sessionStartTime, setSessionStartTime] = useState<string | null>(null);
+  const {
+    phase,
+    remainingSeconds,
+    totalDurationSeconds,
+    isRunning,
+    completedCycles,
+    workMinutes,
+    breakMinutes,
+    breaksEnabled,
+  } = timerState;
 
-  // When room settings change and timer is not currently running, adapt
-  useEffect(() => {
-    if (!isRunning) {
-      const dur = phase === 'work' ? workMinutes * 60 : breakMinutes * 60;
-      setRemainingSeconds(dur);
-      setTotalSeconds(dur);
-    }
-  }, [workMinutes, breakMinutes]);
-
-  // Main countdown interval loop
-  useEffect(() => {
-    let interval: any = null;
-
-    if (isRunning) {
-      interval = setInterval(() => {
-        setRemainingSeconds((prev) => {
-          if (prev > 1) {
-            return prev - 1;
-          }
-
-          // Phase completed!
-          sound.playChime();
-
-          if (phase === 'work') {
-            // Save work session to SQLite database
-            const actualSeconds = totalSeconds;
-            const startIso = sessionStartTime || new Date(Date.now() - actualSeconds * 1000).toISOString();
-            const endIso = new Date().toISOString();
-
-            api.createSession({
-              room_id: activeRoomId,
-              title: sessionGoal.trim() || 'Deep Study Session',
-              category: 'Study',
-              target_duration_seconds: totalSeconds,
-              actual_duration_seconds: actualSeconds,
-              completed: true,
-              started_at: startIso,
-              ended_at: endIso,
-              notes: sessionNotes.trim() || null,
-            }).then(() => {
-              if (onSessionComplete) onSessionComplete();
-            }).catch(console.error);
-
-            setCompletedSessionsCount((c) => c + 1);
-
-            // Switch to break phase
-            setPhase('break');
-            const nextTotal = breakMinutes * 60;
-            setTotalSeconds(nextTotal);
-            setIsRunning(false);
-            setSessionStartTime(null);
-            return nextTotal;
-          } else {
-            // Break completed, switch back to work
-            setPhase('work');
-            const nextTotal = workMinutes * 60;
-            setTotalSeconds(nextTotal);
-            setIsRunning(false);
-            setSessionStartTime(null);
-            return nextTotal;
-          }
-        });
-      }, 1000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isRunning, phase, totalSeconds, activeRoomId, sessionGoal, sessionNotes, sessionStartTime, breakMinutes, workMinutes, onSessionComplete]);
-
-  const toggleTimer = () => {
-    if (!isRunning && !sessionStartTime) {
-      setSessionStartTime(new Date().toISOString());
-    }
-    setIsRunning(!isRunning);
-  };
-
-  const resetTimer = () => {
-    setIsRunning(false);
-    const dur = phase === 'work' ? workMinutes * 60 : breakMinutes * 60;
-    setRemainingSeconds(dur);
-    setTotalSeconds(dur);
-    setSessionStartTime(null);
-  };
-
-  const skipPhase = () => {
-    setIsRunning(false);
-    if (phase === 'work') {
-      setPhase('break');
-      const dur = breakMinutes * 60;
-      setRemainingSeconds(dur);
-      setTotalSeconds(dur);
-    } else {
-      setPhase('work');
-      const dur = workMinutes * 60;
-      setRemainingSeconds(dur);
-      setTotalSeconds(dur);
-    }
-    setSessionStartTime(null);
-  };
-
-  // Switch presets directly
-  const switchPreset = (workM: number, breakM: number) => {
-    setIsRunning(false);
-    setPhase('work');
-    const dur = workM * 60;
-    setRemainingSeconds(dur);
-    setTotalSeconds(dur);
-    setSessionStartTime(null);
-  };
-
-  // Calculate circular progress
-  const progressPercent = totalSeconds > 0 ? ((totalSeconds - remainingSeconds) / totalSeconds) * 100 : 0;
-  const strokeDashoffset = 565 - (565 * progressPercent) / 100; // circle radius 90: circumference ~565.48
+  const radius = 116;
+  const circumference = 2 * Math.PI * radius;
+  const progressPercent = calculateProgress(totalDurationSeconds, remainingSeconds);
+  const strokeDashoffset = circumference - (circumference * progressPercent) / 100;
 
   return (
-    <div className="flex flex-col items-center p-6 md:p-8 rounded-3xl bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-sm text-center relative overflow-hidden">
-      {/* Background soft ambient breathe glow during active focus */}
-      {isRunning && (
-        <div className="absolute inset-0 pointer-events-none bg-[var(--accent-soft)] opacity-20 animate-breathe" />
-      )}
+    <section aria-label="Focus Timer" className="flex flex-col items-center py-4 sm:py-8 select-none">
+      {/* Custom Pomodoro & Session Duration Bar — dims away when session runs */}
+      <div className="focus-dimmable flex flex-col items-center gap-3 mb-6">
+        {/* Preset Shortcuts */}
+        <div className="flex flex-wrap items-center justify-center gap-1">
+          {QUICK_PRESETS.map((preset) => {
+            const isSelected =
+              workMinutes === preset.work &&
+              breaksEnabled === preset.breaks &&
+              (!preset.breaks || breakMinutes === preset.brk);
+            return (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() =>
+                  onConfigureTimer({
+                    workMinutes: preset.work,
+                    breakMinutes: preset.brk,
+                    breaksEnabled: preset.breaks,
+                  })
+                }
+                className={`px-3 py-1 rounded-full text-xs font-mono transition-colors ${
+                  isSelected
+                    ? 'bg-[var(--ink-wash-strong)] text-[var(--text-main)] font-medium'
+                    : 'text-[var(--text-faint)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash)]'
+                }`}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+        </div>
 
-      {/* Preset Pill Selector */}
-      <div className="flex items-center gap-1.5 p-1 rounded-full bg-[var(--bg-card-subtle)] border border-[var(--border-subtle)] mb-6 z-10">
-        <button
-          onClick={() => switchPreset(25, 5)}
-          className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-            workMinutes === 25 && phase === 'work'
-              ? 'bg-[var(--accent-main)] text-white shadow-sm'
-              : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-          }`}
-        >
-          25 / 5m
-        </button>
-        <button
-          onClick={() => switchPreset(50, 10)}
-          className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-            workMinutes === 50 && phase === 'work'
-              ? 'bg-[var(--accent-main)] text-white shadow-sm'
-              : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-          }`}
-        >
-          50 / 10m
-        </button>
-        <button
-          onClick={() => switchPreset(90, 15)}
-          className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-            workMinutes === 90 && phase === 'work'
-              ? 'bg-[var(--accent-main)] text-white shadow-sm'
-              : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-          }`}
-        >
-          90 / 15m
-        </button>
-      </div>
+        {/* Inline Custom Duration & Optional Breaks Controls */}
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-[var(--text-muted)]">
+          {/* Custom Focus Duration */}
+          <div className="inline-flex items-center gap-1.5">
+            <span className="text-[var(--text-faint)]">Focus</span>
+            <button
+              type="button"
+              onClick={() => onConfigureTimer({ workMinutes: Math.max(1, workMinutes - 5) })}
+              className="p-1 rounded-full hover:bg-[var(--ink-wash)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+              aria-label="Decrease focus minutes"
+            >
+              <Minus className="w-3 h-3" />
+            </button>
+            <input
+              type="number"
+              min={1}
+              max={240}
+              value={workMinutes}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!Number.isNaN(v)) {
+                  onConfigureTimer({ workMinutes: v });
+                }
+              }}
+              aria-label="Focus duration in minutes"
+              className="w-10 text-center font-mono text-xs bg-[var(--ink-wash)] text-[var(--text-main)] rounded-md py-0.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent-main)]"
+            />
+            <button
+              type="button"
+              onClick={() => onConfigureTimer({ workMinutes: Math.min(240, workMinutes + 5) })}
+              className="p-1 rounded-full hover:bg-[var(--ink-wash)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+              aria-label="Increase focus minutes"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+            <span className="text-[var(--text-faint)]">m</span>
+          </div>
 
-      {/* Circular Progress & Clock Face */}
-      <div className="relative w-64 h-64 flex items-center justify-center my-2 z-10">
-        <svg className="w-full h-full transform -rotate-90">
-          {/* Background circle */}
-          <circle
-            cx="128"
-            cy="128"
-            r="90"
-            className="stroke-[var(--bg-card-subtle)]"
-            strokeWidth="6"
-            fill="transparent"
+          <span className="text-[var(--border-hairline)]">·</span>
+
+          {/* Breaks Toggle */}
+          <CalmSwitch
+            id="breaks-toggle"
+            checked={breaksEnabled}
+            onCheckedChange={(checked) => onConfigureTimer({ breaksEnabled: checked })}
+            label={breaksEnabled ? 'Breaks' : 'No breaks'}
           />
-          {/* Progress circle */}
-          <circle
-            cx="128"
-            cy="128"
-            r="90"
-            className="stroke-[var(--accent-main)] transition-all duration-1000 ease-linear"
-            strokeWidth="6"
-            strokeDasharray={565.48}
-            strokeDashoffset={strokeDashoffset}
-            strokeLinecap="round"
-            fill="transparent"
-          />
-        </svg>
 
-        {/* Inner Timer text */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-[11px] font-medium tracking-widest uppercase mb-1 text-[var(--accent-main)]">
-            {phase === 'work' ? 'Focus Session' : 'Rest & Breathe'}
-          </span>
-          <span className="text-5xl font-mono tracking-tight font-medium text-[var(--text-main)]">
-            {formatTime(remainingSeconds)}
-          </span>
-          <span className="text-xs text-[var(--text-muted)] mt-1 font-mono">
-            {formatDuration(totalSeconds)} target
-          </span>
+          {/* Custom Break Duration (shown when breaks are enabled) */}
+          {breaksEnabled && (
+            <div className="inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onConfigureTimer({ breakMinutes: Math.max(1, breakMinutes - 1) })}
+                className="p-1 rounded-full hover:bg-[var(--ink-wash)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+                aria-label="Decrease break minutes"
+              >
+                <Minus className="w-3 h-3" />
+              </button>
+              <input
+                type="number"
+                min={1}
+                max={90}
+                value={breakMinutes}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  if (!Number.isNaN(v)) {
+                    onConfigureTimer({ breakMinutes: v });
+                  }
+                }}
+                aria-label="Break duration in minutes"
+                className="w-9 text-center font-mono text-xs bg-[var(--ink-wash)] text-[var(--text-main)] rounded-md py-0.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent-main)]"
+              />
+              <button
+                type="button"
+                onClick={() => onConfigureTimer({ breakMinutes: Math.min(90, breakMinutes + 1) })}
+                className="p-1 rounded-full hover:bg-[var(--ink-wash)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+                aria-label="Increase break minutes"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+              <span className="text-[var(--text-faint)]">m break</span>
+            </div>
+          )}
+
+          {hasUnsavedRoomChanges && onSaveTimerToRoom && (
+            <>
+              <span className="text-[var(--border-hairline)]">·</span>
+              <button
+                type="button"
+                onClick={onSaveTimerToRoom}
+                className="inline-flex items-center gap-1 text-xs text-[var(--accent-main)] hover:underline"
+              >
+                <Check className="w-3 h-3" />
+                Save to room
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Goal / Study Note Input */}
-      <div className="w-full max-w-sm mt-3 mb-6 z-10">
-        <div className="relative flex items-center">
-          <BookOpen className="w-4 h-4 absolute left-3.5 text-[var(--text-muted)] pointer-events-none" />
+      {/* =========================================================
+          UNDIMMED FOCUS CORE: Stays crisp & luminous during session
+         ========================================================= */}
+      <div className="relative flex flex-col items-center">
+        {/* Soft radial breathing aura only when actively running */}
+        <div
+          className={`absolute top-6 w-64 h-64 rounded-full pointer-events-none transition-opacity duration-1000 blur-2xl ${
+            isRunning ? 'opacity-100 animate-breathe' : 'opacity-0'
+          }`}
+          style={{ background: 'var(--accent-aura)' }}
+        />
+
+        {/* Delicate Hairline Progress Dial */}
+        <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 256 256">
+            <circle
+              cx="128"
+              cy="128"
+              r={radius}
+              stroke="var(--border-hairline)"
+              strokeWidth="2"
+              fill="transparent"
+            />
+            <circle
+              cx="128"
+              cy="128"
+              r={radius}
+              stroke="var(--accent-main)"
+              strokeWidth="2.5"
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+              fill="transparent"
+              className="transition-[stroke-dashoffset] duration-1000 ease-linear"
+            />
+          </svg>
+
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
+            <span className="text-[10px] font-medium tracking-[0.22em] uppercase text-[var(--accent-main)] mb-2">
+              {phase === 'work'
+                ? breaksEnabled
+                  ? 'Focus'
+                  : 'Deep Flow'
+                : 'Rest'}
+            </span>
+
+            <span className="text-6xl sm:text-7xl font-mono font-light tracking-tight tabular-nums text-[var(--text-main)]">
+              {formatTime(remainingSeconds)}
+            </span>
+
+            <span className="text-[11px] font-mono text-[var(--text-faint)] mt-2.5">
+              {breaksEnabled
+                ? `${workMinutes}m · ${breakMinutes}m rest`
+                : `${workMinutes}m continuous`}
+            </span>
+          </div>
+        </div>
+
+        {/* Minimalist Intention Line (blends seamlessly into canvas) */}
+        <div className="w-full max-w-xs mt-2 mb-6">
           <input
             type="text"
             value={sessionGoal}
-            onChange={(e) => setSessionGoal(e.target.value)}
-            placeholder="Focus goal (e.g. Chapter 4 Notes, Problem Set #2)"
-            className="w-full pl-9 pr-3 py-2 text-xs text-center bg-[var(--bg-card-subtle)] text-[var(--text-main)] placeholder-[var(--text-muted)] border border-[var(--border-subtle)] rounded-xl focus:outline-none focus:ring-1 focus:ring-[var(--accent-main)]"
+            onChange={(e) => onSessionGoalChange(e.target.value)}
+            placeholder="Write your study intention..."
+            aria-label="Study intention"
+            className="w-full text-center text-sm bg-transparent text-[var(--text-main)] placeholder-[var(--text-faint)] py-1.5 border-b border-transparent focus:border-[var(--border-hairline)] hover:border-[var(--border-hairline)] focus:outline-none transition-colors select-text"
           />
         </div>
-      </div>
 
-      {/* Primary Control Buttons */}
-      <div className="flex items-center gap-3 z-10">
-        <button
-          onClick={resetTimer}
-          className="p-3 rounded-full bg-[var(--bg-card-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--border-subtle)] transition-all"
-          title="Reset Timer"
-        >
-          <RotateCcw className="w-4 h-4" />
-        </button>
+        {/* Calm Primary Controls */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onResetTimer}
+            className="p-2.5 rounded-full text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash)] transition-colors"
+            title="Reset timer"
+            aria-label="Reset timer"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
 
-        <button
-          onClick={toggleTimer}
-          className="px-8 py-3.5 rounded-full bg-[var(--accent-main)] text-white hover:bg-[var(--accent-hover)] transition-all shadow-sm active:scale-95 flex items-center gap-2 font-medium text-sm"
-        >
-          {isRunning ? (
-            <>
-              <Pause className="w-4 h-4 fill-current" />
-              <span>Pause</span>
-            </>
+          <button
+            type="button"
+            onClick={onToggleTimer}
+            className="px-7 py-2.5 rounded-full bg-[var(--accent-main)] text-[var(--accent-fg)] hover:bg-[var(--accent-hover)] transition-all active:scale-[0.98] inline-flex items-center gap-2 text-xs font-medium tracking-wide"
+          >
+            {isRunning ? (
+              <>
+                <Pause className="w-3.5 h-3.5 fill-current" />
+                <span>Pause</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                <span>
+                  {remainingSeconds < totalDurationSeconds ? 'Resume' : 'Start Session'}
+                </span>
+              </>
+            )}
+          </button>
+
+          {breaksEnabled ? (
+            <button
+              type="button"
+              onClick={onSkipPhase}
+              className="p-2.5 rounded-full text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash)] transition-colors"
+              title={phase === 'work' ? 'Skip to break' : 'Skip to focus'}
+              aria-label={phase === 'work' ? 'Skip to break' : 'Skip to focus'}
+            >
+              <SkipForward className="w-4 h-4" />
+            </button>
           ) : (
-            <>
-              <Play className="w-4 h-4 fill-current ml-0.5" />
-              <span>{remainingSeconds < totalSeconds ? 'Resume' : 'Start Focus'}</span>
-            </>
+            <div className="w-9" aria-hidden="true" />
           )}
-        </button>
-
-        <button
-          onClick={skipPhase}
-          className="p-3 rounded-full bg-[var(--bg-card-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--border-subtle)] transition-all"
-          title={phase === 'work' ? 'Skip to break' : 'Skip to focus'}
-        >
-          <SkipForward className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Completed indicator */}
-      {completedSessionsCount > 0 && (
-        <div className="flex items-center gap-1.5 mt-5 text-xs text-[var(--text-muted)] z-10">
-          <CheckCircle2 className="w-3.5 h-3.5 text-[var(--accent-main)]" />
-          <span>{completedSessionsCount} focus block{completedSessionsCount === 1 ? '' : 's'} finished this session</span>
         </div>
-      )}
-    </div>
+
+        {completedCycles > 0 && (
+          <p className="mt-4 text-[11px] font-mono text-[var(--text-faint)]">
+            {completedCycles} {completedCycles === 1 ? 'session' : 'sessions'} completed
+          </p>
+        )}
+      </div>
+    </section>
   );
 };

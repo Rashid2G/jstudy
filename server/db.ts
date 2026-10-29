@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { Room, RadioStation, StudySession, PlayHistoryItem, DashboardStats } from '../src/types/index.js';
+import { detectStreamType, isYouTubeUrl, normalizeYouTubeUrl } from '../src/utils/youtube.js';
 import crypto from 'node:crypto';
 
 export class StudintyDatabase {
@@ -7,6 +8,9 @@ export class StudintyDatabase {
 
   constructor(dbPath: string = 'studinty.db') {
     this.db = new DatabaseSync(dbPath);
+    if (dbPath !== ':memory:') {
+      this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
+    }
     this.init();
   }
 
@@ -19,6 +23,7 @@ export class StudintyDatabase {
         theme TEXT NOT NULL DEFAULT 'sage',
         timer_work_minutes INTEGER NOT NULL DEFAULT 25,
         timer_break_minutes INTEGER NOT NULL DEFAULT 5,
+        breaks_enabled INTEGER NOT NULL DEFAULT 1,
         timer_mode TEXT NOT NULL DEFAULT 'pomodoro',
         default_radio_id TEXT,
         ambient_sound TEXT NOT NULL DEFAULT 'rain',
@@ -71,88 +76,124 @@ export class StudintyDatabase {
       CREATE INDEX IF NOT EXISTS idx_sessions_room_id ON sessions(room_id);
     `);
 
+    const roomCols = this.db.prepare('PRAGMA table_info(rooms)').all() as { name: string }[];
+    if (!roomCols.some((c) => c.name === 'breaks_enabled')) {
+      this.db.exec('ALTER TABLE rooms ADD COLUMN breaks_enabled INTEGER NOT NULL DEFAULT 1;');
+    }
+
     this.seedDefaults();
   }
 
   private seedDefaults() {
+    const curatedRadios: Omit<RadioStation, 'created_at'>[] = [
+      {
+        id: 'radio-yt-lofigirl',
+        name: 'Lofi Girl — Study Beats Live',
+        description: '24/7 lofi hip hop radio — beats to relax/study to (audio-only stream).',
+        url: 'https://www.youtube.com/watch?v=rFZHOHl-L8A',
+        stream_type: 'youtube',
+        genre: 'lofi live',
+        is_curated: 1,
+      },
+      {
+        id: 'radio-yt-chillhop',
+        name: 'Chillhop Radio — Study & Relax Live',
+        description: 'Mellow jazzy & lofi hip hop beats 24/7 live stream.',
+        url: 'https://www.youtube.com/watch?v=7NOSDKb0HlU',
+        stream_type: 'youtube',
+        genre: 'chillhop live',
+        is_curated: 1,
+      },
+      {
+        id: 'radio-yt-rain',
+        name: 'Calming Lofi Rain — Live Radio',
+        description: 'Gentle rain and chill study beats 24/7 YouTube live stream.',
+        url: 'https://www.youtube.com/watch?v=vYIYIVmOo3Q',
+        stream_type: 'youtube',
+        genre: 'rain lofi',
+        is_curated: 1,
+      },
+      {
+        id: 'radio-yt-mix',
+        name: 'Lofi Study Mix — Classic Beats',
+        description: 'YouTube study mix streamed purely as background audio.',
+        url: 'https://www.youtube.com/watch?v=CFGLoQIhmow',
+        stream_type: 'youtube',
+        genre: 'youtube mix',
+        is_curated: 1,
+      },
+      {
+        id: 'radio-groove-salad',
+        name: 'SomaFM Groove Salad',
+        description: 'A nicely chilled plate of ambient/downtempo beats and grooves.',
+        url: 'https://ice1.somafm.com/groovesalad-128-mp3',
+        stream_type: 'audio',
+        genre: 'ambient',
+        is_curated: 1,
+      },
+      {
+        id: 'radio-drone-zone',
+        name: 'SomaFM Drone Zone',
+        description: 'Atmospheric minimalist ambient textures for deep reading.',
+        url: 'https://ice1.somafm.com/dronezone-128-mp3',
+        stream_type: 'audio',
+        genre: 'drone',
+        is_curated: 1,
+      },
+      {
+        id: 'radio-nightwave',
+        name: 'Nightwave Plaza',
+        description: 'Late-night vaporwave and mellow synth lofi radio.',
+        url: 'https://radio.plaza.one/mp3',
+        stream_type: 'audio',
+        genre: 'vaporwave',
+        is_curated: 1,
+      },
+      {
+        id: 'radio-lush',
+        name: 'SomaFM Lush',
+        description: 'Mellow vocals with a calm electronic chill influence.',
+        url: 'https://ice1.somafm.com/lush-128-mp3',
+        stream_type: 'audio',
+        genre: 'downtempo',
+        is_curated: 1,
+      },
+      {
+        id: 'radio-defcon',
+        name: 'SomaFM DEF CON',
+        description: 'Focused electronic music for coding and problem-solving.',
+        url: 'https://ice1.somafm.com/defcon-128-mp3',
+        stream_type: 'audio',
+        genre: 'electronic',
+        is_curated: 1,
+      },
+    ];
+
     const radioCountRow = this.db.prepare('SELECT COUNT(*) as count FROM radios').get() as { count: number | bigint };
     const radioCount = Number(radioCountRow.count);
 
+    const upsertCuratedRadio = this.db.prepare(`
+      INSERT INTO radios (id, name, description, url, stream_type, genre, is_curated, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        description = excluded.description,
+        url = excluded.url,
+        stream_type = excluded.stream_type,
+        genre = excluded.genre
+      WHERE radios.is_curated = 1
+    `);
+
+    const now = new Date().toISOString();
     if (radioCount === 0) {
-      const defaultRadios: Omit<RadioStation, 'created_at'>[] = [
-        {
-          id: 'radio-groove-salad',
-          name: 'SomaFM Groove Salad',
-          description: 'A nicely chilled plate of ambient/downtempo beats and grooves.',
-          url: 'https://ice1.somafm.com/groovesalad-128-mp3',
-          stream_type: 'audio',
-          genre: 'ambient',
-          is_curated: 1,
-        },
-        {
-          id: 'radio-drone-zone',
-          name: 'SomaFM Drone Zone',
-          description: 'Served best chilled, safe with most medications. Atmospheric ambient for deep studying.',
-          url: 'https://ice1.somafm.com/dronezone-128-mp3',
-          stream_type: 'audio',
-          genre: 'drone',
-          is_curated: 1,
-        },
-        {
-          id: 'radio-nightwave',
-          name: 'Nightwave Plaza',
-          description: 'Top-tier vaporwave, future funk and mellow synth lofi radio.',
-          url: 'https://radio.plaza.one/mp3',
-          stream_type: 'audio',
-          genre: 'synthwave',
-          is_curated: 1,
-        },
-        {
-          id: 'radio-lush',
-          name: 'SomaFM Lush',
-          description: 'Sensuous and mellow vocals, mostly female, with an electronic chill influence.',
-          url: 'https://ice1.somafm.com/lush-128-mp3',
-          stream_type: 'audio',
-          genre: 'downtempo',
-          is_curated: 1,
-        },
-        {
-          id: 'radio-defcon',
-          name: 'SomaFM DEF CON',
-          description: 'Music for hacking, coding and high-concentration reading.',
-          url: 'https://ice1.somafm.com/defcon-128-mp3',
-          stream_type: 'audio',
-          genre: 'electronic',
-          is_curated: 1,
-        },
-        {
-          id: 'radio-ambient-rain',
-          name: 'Pure Rain & Focus Chime',
-          description: 'Synthesized gentle rainfall and calming acoustic warmth generated on your device.',
-          url: 'ambient:rain',
-          stream_type: 'ambient',
-          genre: 'nature',
-          is_curated: 1,
-        },
-        {
-          id: 'radio-ambient-cafe',
-          name: 'Coffee House Chatter',
-          description: 'Subtle cup clinks, espresso steam, and distant warm chatter.',
-          url: 'ambient:cafe',
-          stream_type: 'ambient',
-          genre: 'ambient',
-          is_curated: 1,
-        }
-      ];
-
-      const insertRadio = this.db.prepare(`
-        INSERT INTO radios (id, name, description, url, stream_type, genre, is_curated, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      const now = new Date().toISOString();
-      for (const r of defaultRadios) {
-        insertRadio.run(r.id, r.name, r.description, r.url, r.stream_type, r.genre, r.is_curated, now);
+      for (const r of curatedRadios) {
+        upsertCuratedRadio.run(r.id, r.name, r.description, r.url, r.stream_type, r.genre, r.is_curated, now);
+      }
+    } else {
+      // Keep curated YouTube stations updated to active live IDs
+      this.db.prepare("DELETE FROM radios WHERE id = 'radio-yt-synthwave' AND is_curated = 1").run();
+      for (const r of curatedRadios.filter((item) => item.stream_type === 'youtube')) {
+        upsertCuratedRadio.run(r.id, r.name, r.description, r.url, r.stream_type, r.genre, r.is_curated, now);
       }
     }
 
@@ -168,62 +209,65 @@ export class StudintyDatabase {
           theme: 'sage',
           timer_work_minutes: 50,
           timer_break_minutes: 10,
+          breaks_enabled: 1,
           timer_mode: 'pomodoro',
           default_radio_id: 'radio-drone-zone',
           ambient_sound: 'rain',
-          ambient_volume: 0.4,
-          radio_volume: 0.75,
+          ambient_volume: 0.35,
+          radio_volume: 0.7,
         },
         {
           id: 'room-midnight-lofi',
           name: 'Midnight Study Desk',
-          description: 'Warm night vibes with cozy hearth sounds and mellow beats.',
+          description: 'Warm night vibes with cozy hearth sounds and Lofi Girl live beats.',
           theme: 'dusk',
           timer_work_minutes: 25,
           timer_break_minutes: 5,
+          breaks_enabled: 1,
           timer_mode: 'pomodoro',
-          default_radio_id: 'radio-groove-salad',
+          default_radio_id: 'radio-yt-lofigirl',
           ambient_sound: 'fireplace',
-          ambient_volume: 0.35,
+          ambient_volume: 0.3,
           radio_volume: 0.7,
         },
         {
           id: 'room-coffee-flow',
           name: 'Corner Cafe Nook',
-          description: 'Warm morning light, light acoustic coffee shop ambiance and quick 30-min bursts.',
+          description: 'Warm oat tones, coffee shop ambiance, and uninterrupted 45-min flow.',
           theme: 'sand',
-          timer_work_minutes: 30,
-          timer_break_minutes: 5,
-          timer_mode: 'pomodoro',
-          default_radio_id: 'radio-nightwave',
+          timer_work_minutes: 45,
+          timer_break_minutes: 0,
+          breaks_enabled: 0,
+          timer_mode: 'continuous',
+          default_radio_id: 'radio-yt-chillhop',
           ambient_sound: 'cafe',
-          ambient_volume: 0.4,
-          radio_volume: 0.8,
+          ambient_volume: 0.35,
+          radio_volume: 0.75,
         },
         {
           id: 'room-nordic-zen',
           name: 'Nordic Clean Focus',
-          description: 'Ultra minimalist slate aesthetics for math, thesis writing, and heavy problem solving.',
+          description: 'Minimalist slate aesthetics for math, thesis writing, and heavy problem solving.',
           theme: 'slate',
-          timer_work_minutes: 45,
-          timer_break_minutes: 15,
-          timer_mode: 'pomodoro',
-          default_radio_id: 'radio-lush',
+          timer_work_minutes: 60,
+          timer_break_minutes: 10,
+          breaks_enabled: 1,
+          timer_mode: 'custom',
+          default_radio_id: 'radio-groove-salad',
           ambient_sound: 'waves',
-          ambient_volume: 0.3,
+          ambient_volume: 0.25,
           radio_volume: 0.7,
-        }
+        },
       ];
 
       const insertRoom = this.db.prepare(`
         INSERT INTO rooms (
           id, name, description, theme, timer_work_minutes, timer_break_minutes,
-          timer_mode, default_radio_id, ambient_sound, ambient_volume, radio_volume,
+          breaks_enabled, timer_mode, default_radio_id, ambient_sound, ambient_volume, radio_volume,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
-      const now = new Date().toISOString();
       for (const r of defaultRooms) {
         insertRoom.run(
           r.id,
@@ -232,6 +276,7 @@ export class StudintyDatabase {
           r.theme,
           r.timer_work_minutes,
           r.timer_break_minutes,
+          r.breaks_enabled,
           r.timer_mode,
           r.default_radio_id,
           r.ambient_sound,
@@ -254,27 +299,34 @@ export class StudintyDatabase {
     return (row as unknown as Room) || null;
   }
 
-  createRoom(data: Omit<Room, 'id' | 'created_at' | 'updated_at'>): Room {
+  createRoom(data: Partial<Omit<Room, 'id' | 'created_at' | 'updated_at'>> & { name: string }): Room {
     const id = `room-${crypto.randomUUID()}`;
     const now = new Date().toISOString();
+    const breaksEnabled = data.breaks_enabled !== undefined ? (data.breaks_enabled ? 1 : 0) : 1;
+    const workMins = Math.max(1, Math.min(240, Number(data.timer_work_minutes ?? 25)));
+    const breakMins = breaksEnabled
+      ? Math.max(1, Math.min(90, Number(data.timer_break_minutes ?? 5)))
+      : Math.max(0, Math.min(90, Number(data.timer_break_minutes ?? 0)));
+
     this.db.prepare(`
       INSERT INTO rooms (
         id, name, description, theme, timer_work_minutes, timer_break_minutes,
-        timer_mode, default_radio_id, ambient_sound, ambient_volume, radio_volume,
+        breaks_enabled, timer_mode, default_radio_id, ambient_sound, ambient_volume, radio_volume,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       data.name,
       data.description || '',
       data.theme || 'sage',
-      data.timer_work_minutes || 25,
-      data.timer_break_minutes || 5,
-      data.timer_mode || 'pomodoro',
-      data.default_radio_id || null,
+      workMins,
+      breakMins,
+      breaksEnabled,
+      data.timer_mode || (breaksEnabled ? 'pomodoro' : 'continuous'),
+      data.default_radio_id ?? null,
       data.ambient_sound || 'none',
-      data.ambient_volume ?? 0.5,
-      data.radio_volume ?? 0.8,
+      data.ambient_volume ?? 0.4,
+      data.radio_volume ?? 0.75,
       now,
       now
     );
@@ -286,16 +338,32 @@ export class StudintyDatabase {
     const current = this.getRoomById(id);
     if (!current) return null;
 
+    const breaksEnabled =
+      data.breaks_enabled !== undefined ? (data.breaks_enabled ? 1 : 0) : current.breaks_enabled;
+
+    const workMins =
+      data.timer_work_minutes !== undefined
+        ? Math.max(1, Math.min(240, Number(data.timer_work_minutes)))
+        : current.timer_work_minutes;
+
+    const breakMins =
+      data.timer_break_minutes !== undefined
+        ? Math.max(breaksEnabled ? 1 : 0, Math.min(90, Number(data.timer_break_minutes)))
+        : current.timer_break_minutes;
+
     const updated = {
       ...current,
       ...data,
-      updated_at: new Date().toISOString()
+      timer_work_minutes: workMins,
+      timer_break_minutes: breakMins,
+      breaks_enabled: breaksEnabled,
+      updated_at: new Date().toISOString(),
     };
 
     this.db.prepare(`
       UPDATE rooms SET
         name = ?, description = ?, theme = ?, timer_work_minutes = ?,
-        timer_break_minutes = ?, timer_mode = ?, default_radio_id = ?,
+        timer_break_minutes = ?, breaks_enabled = ?, timer_mode = ?, default_radio_id = ?,
         ambient_sound = ?, ambient_volume = ?, radio_volume = ?, updated_at = ?
       WHERE id = ?
     `).run(
@@ -304,6 +372,7 @@ export class StudintyDatabase {
       updated.theme,
       updated.timer_work_minutes,
       updated.timer_break_minutes,
+      updated.breaks_enabled,
       updated.timer_mode,
       updated.default_radio_id,
       updated.ambient_sound,
@@ -331,9 +400,14 @@ export class StudintyDatabase {
     return (row as unknown as RadioStation) || null;
   }
 
-  createRadio(data: Omit<RadioStation, 'id' | 'created_at'>): RadioStation {
+  createRadio(data: Omit<RadioStation, 'id' | 'created_at' | 'stream_type'> & { stream_type?: RadioStation['stream_type'] }): RadioStation {
     const id = `radio-${crypto.randomUUID()}`;
     const now = new Date().toISOString();
+    const rawUrl = data.url.trim();
+    const detectedType = detectStreamType(rawUrl);
+    const streamType = detectedType === 'youtube' ? 'youtube' : (data.stream_type || detectedType);
+    const finalUrl = isYouTubeUrl(rawUrl) ? normalizeYouTubeUrl(rawUrl) : rawUrl;
+
     this.db.prepare(`
       INSERT INTO radios (id, name, description, url, stream_type, genre, is_curated, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -341,8 +415,8 @@ export class StudintyDatabase {
       id,
       data.name,
       data.description || '',
-      data.url,
-      data.stream_type || 'audio',
+      finalUrl,
+      streamType,
       data.genre || 'lofi',
       data.is_curated ?? 0,
       now
@@ -354,7 +428,6 @@ export class StudintyDatabase {
   deleteRadio(id: string): boolean {
     const radio = this.getRadioById(id);
     if (!radio) return false;
-    // Don't delete curated unless user explicitly removes, but allow deleting custom radios
     const result = this.db.prepare('DELETE FROM radios WHERE id = ?').run(id);
     return Number(result.changes) > 0;
   }
@@ -437,7 +510,6 @@ export class StudintyDatabase {
       WHERE completed = 1 AND started_at >= ?
     `).get(`${today}T00:00:00.000Z`) as { todayFocusSeconds: number | bigint };
 
-    // Calculate streak days
     const datesRow = this.db.prepare(`
       SELECT DISTINCT substr(started_at, 1, 10) as study_date
       FROM sessions
@@ -447,10 +519,8 @@ export class StudintyDatabase {
 
     let streak = 0;
     if (datesRow.length > 0) {
-      const dates = new Set(datesRow.map(d => d.study_date));
-      let currentCheck = new Date();
-      
-      // If no study today, check if yesterday was studied to maintain streak
+      const dates = new Set(datesRow.map((d) => d.study_date));
+      const currentCheck = new Date();
       const todayStr = currentCheck.toISOString().slice(0, 10);
       if (!dates.has(todayStr)) {
         currentCheck.setDate(currentCheck.getDate() - 1);
@@ -471,7 +541,7 @@ export class StudintyDatabase {
       totalFocusSeconds: Number(totalRow.totalFocusSeconds),
       completedSessionsCount: Number(totalRow.completedSessionsCount),
       activeStreakDays: streak,
-      todayFocusSeconds: Number(todayRow.todayFocusSeconds)
+      todayFocusSeconds: Number(todayRow.todayFocusSeconds),
     };
   }
 }

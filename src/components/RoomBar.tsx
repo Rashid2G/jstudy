@@ -1,6 +1,6 @@
 import React from 'react';
 import { Room } from '../types/index.js';
-import { Plus, Sliders, Sparkles } from 'lucide-react';
+import { Plus, SlidersHorizontal } from 'lucide-react';
 
 interface Props {
   rooms: Room[];
@@ -18,49 +18,58 @@ export const RoomBar: React.FC<Props> = ({
   onOpenEditModal,
 }) => {
   return (
-    <div className="flex items-center justify-between gap-2 overflow-x-auto py-1 scrollbar-none">
-      <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
-        <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)] mr-1 hidden sm:inline-block">
-          Rooms:
-        </span>
+    <nav
+      aria-label="Study rooms"
+      className="focus-dimmable flex items-center justify-between gap-3 overflow-x-auto py-1"
+    >
+      <div className="flex items-center gap-1 flex-wrap">
         {rooms.map((room) => {
           const isActive = room.id === activeRoomId;
+          const timingBadge = room.breaks_enabled
+            ? `${room.timer_work_minutes}/${room.timer_break_minutes}m`
+            : `${room.timer_work_minutes}m`;
+
           return (
             <button
               key={room.id}
+              type="button"
               onClick={() => onSelectRoom(room.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs transition-all whitespace-nowrap flex items-center gap-1.5 border ${
+              className={`px-3 py-1.5 rounded-full text-xs transition-all whitespace-nowrap inline-flex items-center gap-1.5 ${
                 isActive
-                  ? 'bg-[var(--accent-main)] text-white border-[var(--accent-main)] shadow-sm font-medium'
-                  : 'bg-[var(--bg-card)] text-[var(--text-main)] border-[var(--border-subtle)] hover:border-[var(--accent-main)] hover:bg-[var(--bg-card-subtle)]'
+                  ? 'bg-[var(--ink-wash-strong)] text-[var(--text-main)] font-medium'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash)]'
               }`}
             >
               <span>{room.name}</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-black/20 text-white' : 'bg-[var(--bg-card-subtle)] text-[var(--text-muted)]'}`}>
-                {room.timer_work_minutes}m
+              <span className="text-[10px] font-mono text-[var(--text-faint)]">
+                {timingBadge}
               </span>
             </button>
           );
         })}
 
         <button
+          type="button"
           onClick={onOpenCreateModal}
-          className="px-2.5 py-1.5 rounded-xl text-xs bg-[var(--bg-card-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-dashed border-[var(--border-subtle)] hover:border-[var(--accent-main)] transition-colors flex items-center gap-1"
-          title="Create New Custom Room"
+          className="px-2.5 py-1.5 rounded-full text-xs text-[var(--text-faint)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash)] transition-colors inline-flex items-center gap-1"
+          title="Create custom study room"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>New Room</span>
+          <span>Room</span>
         </button>
       </div>
 
-      <button
-        onClick={onOpenEditModal}
-        className="px-2.5 py-1.5 rounded-xl text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-card)] border border-[var(--border-subtle)] hover:bg-[var(--bg-card-subtle)] transition-colors flex items-center gap-1.5 shrink-0"
-        title="Customize active room"
-      >
-        <Sliders className="w-3.5 h-3.5" />
-        <span className="hidden sm:inline">Customize Room</span>
-      </button>
-    </div>
+      {activeRoomId && (
+        <button
+          type="button"
+          onClick={onOpenEditModal}
+          className="px-2.5 py-1.5 rounded-full text-xs text-[var(--text-faint)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash)] transition-colors inline-flex items-center gap-1.5 shrink-0"
+          title="Edit current room settings"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Room settings</span>
+        </button>
+      )}
+    </nav>
   );
 };

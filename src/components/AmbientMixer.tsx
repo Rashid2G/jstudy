@@ -2,6 +2,7 @@ import React from 'react';
 import { AmbientSoundType } from '../types/index.js';
 import { CloudRain, Flame, Coffee, Waves, Wind, VolumeX } from 'lucide-react';
 import { sound } from '../utils/sound.js';
+import { CalmSlider } from './ui.js';
 
 interface Props {
   ambientSound: AmbientSoundType;
@@ -10,13 +11,17 @@ interface Props {
   onVolumeChange: (volume: number) => void;
 }
 
-const SOUND_OPTIONS: { id: AmbientSoundType; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+const SOUND_OPTIONS: {
+  id: AmbientSoundType;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
   { id: 'none', label: 'Off', icon: VolumeX },
   { id: 'rain', label: 'Rain', icon: CloudRain },
   { id: 'fireplace', label: 'Hearth', icon: Flame },
   { id: 'cafe', label: 'Cafe', icon: Coffee },
   { id: 'waves', label: 'Waves', icon: Waves },
-  { id: 'whitenoise', label: 'White Noise', icon: Wind },
+  { id: 'whitenoise', label: 'Wind', icon: Wind },
 ];
 
 export const AmbientMixer: React.FC<Props> = ({
@@ -34,8 +39,7 @@ export const AmbientMixer: React.FC<Props> = ({
     }
   };
 
-  const handleVolume = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseFloat(e.target.value);
+  const handleVolume = (val: number) => {
     onVolumeChange(val);
     sound.setAmbientVolume(val);
     if (ambientSound !== 'none' && val > 0 && sound.getCurrentAmbientType() === 'none') {
@@ -44,53 +48,60 @@ export const AmbientMixer: React.FC<Props> = ({
   };
 
   return (
-    <div className="p-4 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-sm">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
-          Ambient Layer
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-medium uppercase tracking-widest text-[var(--text-faint)]">
+          Ambient Atmosphere
         </span>
         {ambientSound !== 'none' && (
-          <span className="text-xs font-mono text-[var(--text-muted)]">
+          <span className="text-[10px] font-mono text-[var(--text-faint)]">
             {Math.round(ambientVolume * 100)}%
           </span>
         )}
       </div>
 
-      <div className="grid grid-cols-6 gap-1.5 mb-3">
+      <div className="flex flex-wrap items-center gap-1.5">
         {SOUND_OPTIONS.map((opt) => {
           const Icon = opt.icon;
           const isActive = ambientSound === opt.id;
           return (
             <button
               key={opt.id}
+              type="button"
               onClick={() => handleSelect(opt.id)}
-              className={`flex flex-col items-center justify-center p-2 rounded-xl text-xs transition-all ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs transition-colors ${
                 isActive
-                  ? 'bg-[var(--accent-main)] text-white shadow-sm font-medium'
-                  : 'bg-[var(--bg-card-subtle)] text-[var(--text-main)] hover:bg-[var(--border-subtle)] opacity-80 hover:opacity-100'
+                  ? 'bg-[var(--ink-wash-strong)] text-[var(--text-main)] font-medium'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash)]'
               }`}
             >
-              <Icon className="w-4 h-4 mb-1" />
-              <span className="text-[10px] leading-tight truncate">{opt.label}</span>
+              <Icon className="w-3.5 h-3.5" />
+              <span>{opt.label}</span>
             </button>
           );
         })}
       </div>
 
-      {ambientSound !== 'none' && (
-        <div className="flex items-center gap-3 pt-1">
-          <span className="text-[11px] text-[var(--text-muted)]">Volume</span>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={ambientVolume}
-            onChange={handleVolume}
-            className="flex-1"
-          />
-        </div>
-      )}
+      <div className="flex items-center gap-2.5 pt-0.5">
+        <span className="text-[10px] font-mono text-[var(--text-faint)]">Mix</span>
+        <CalmSlider
+          value={ambientSound === 'none' ? 0 : ambientVolume}
+          min={0}
+          max={1}
+          step={0.02}
+          onChange={(val) => {
+            if (ambientSound === 'none' && val > 0) {
+              onSoundChange('rain');
+              sound.startAmbient('rain', val);
+              onVolumeChange(val);
+            } else {
+              handleVolume(val);
+            }
+          }}
+          ariaLabel="Ambient sound volume"
+          className="flex-1"
+        />
+      </div>
     </div>
   );
 };
