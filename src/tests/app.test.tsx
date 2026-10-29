@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 import React, { act } from 'react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { App } from '../App.js';
 
 // Polyfill ResizeObserver & matchMedia for Radix UI and jsdom
+afterEach(() => {
+  cleanup();
+});
+
 beforeEach(() => {
+  document.body.innerHTML = "";
+  window.localStorage.clear();
   global.ResizeObserver = class ResizeObserver {
     observe() {}
     unobserve() {}

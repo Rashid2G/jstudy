@@ -86,7 +86,21 @@ export function App() {
 
   const [activeTab, setActiveTab] = useState<'timer' | 'sessions' | 'history'>('timer');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<string | null>(null);
+  const [settingsInitialAddStation, setSettingsInitialAddStation] = useState(false);
   const [isZenModeOpen, setIsZenModeOpen] = useState(false);
+
+  const handleOpenSettings = useCallback((options?: { section?: string; addStation?: boolean }) => {
+    setSettingsInitialSection(options?.section || null);
+    setSettingsInitialAddStation(Boolean(options?.addStation));
+    setIsSettingsOpen(true);
+  }, []);
+
+  const handleCloseSettings = useCallback(() => {
+    setIsSettingsOpen(false);
+    setSettingsInitialSection(null);
+    setSettingsInitialAddStation(false);
+  }, []);
 
   const activeStation = radios.find((s) => s.id === currentStationId) || radios[0];
 
@@ -244,7 +258,7 @@ export function App() {
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
         onEnterZenMode={() => setIsZenModeOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={() => handleOpenSettings()}
         stats={stats}
       />
 
@@ -266,7 +280,7 @@ export function App() {
             soundtrackEnabled={soundtrackEnabled}
             onToggleSoundtrack={handleToggleSoundtrack}
             activeStationName={activeStation?.name}
-            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenSettings={() => handleOpenSettings()}
           />
 
           {/* Apple Style Expandable Interactive Widgets */}
@@ -282,6 +296,8 @@ export function App() {
             radioVolume={radioVolume}
             onRadioVolumeChange={handleRadioVolumeChange}
             onAddStation={handleAddRadio}
+            onOpenAddStation={() => handleOpenSettings({ section: 'soundtrack', addStation: true })}
+            onOpenSettings={handleOpenSettings}
             ambientSound={ambientSound}
             ambientVolume={ambientVolume}
             onAmbientSoundChange={handleAmbientSoundChange}
@@ -337,7 +353,9 @@ export function App() {
       {/* Settings Modal (Timer, Color Palettes, Soundtrack, Ambient) */}
       <SettingsModal
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={handleCloseSettings}
+        initialSection={settingsInitialSection}
+        initialAddStation={settingsInitialAddStation}
         timerState={timerState}
         onConfigureTimer={configureCustomTimer}
         stations={radios}

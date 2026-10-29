@@ -12,6 +12,8 @@ interface Props {
   }) => void;
   isExpanded?: boolean;
   isCompressed?: boolean;
+  isTall?: boolean;
+  isNarrow?: boolean;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   onToggleExpand?: () => void;
@@ -32,6 +34,8 @@ export const TimerRhythmWidget: React.FC<Props> = ({
   onConfigureTimer,
   isExpanded = false,
   isCompressed = false,
+  isTall = false,
+  isNarrow = false,
   onMouseEnter,
   onMouseLeave,
   onToggleExpand,
@@ -50,12 +54,14 @@ export const TimerRhythmWidget: React.FC<Props> = ({
 
   return (
     <div
-      className={`apple-widget group rounded-[22px] p-3.5 sm:p-4 bg-[var(--bg-elevated)]/90 backdrop-blur-xl border select-none ${
+      className={`apple-widget group rounded-[22px] bg-[var(--bg-elevated)]/90 backdrop-blur-xl border select-none ${
         isExpanded
-          ? 'is-expanded border-[var(--accent-main)]'
+          ? 'is-expanded border-[var(--accent-main)] p-3.5 sm:p-4 flex flex-col justify-start'
           : isCompressed
-          ? 'is-compressed border-[var(--border-hairline)]'
-          : 'border-[var(--border-hairline)]'
+          ? `is-compressed border-[var(--border-hairline)] ${
+              isTall ? 'p-3 flex flex-col justify-center' : 'px-3 sm:px-3.5 py-0 flex items-center'
+            }`
+          : 'border-[var(--border-hairline)] p-3.5 sm:p-4 flex items-center'
       } ${className}`}
       style={style}
       tabIndex={0}
@@ -64,57 +70,89 @@ export const TimerRhythmWidget: React.FC<Props> = ({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {/* Resting / Header Bar */}
-      <div
-        className="flex items-center justify-between cursor-pointer w-full"
-        onClick={onToggleExpand}
-        title={isExpanded ? 'Click to collapse' : 'Click to expand'}
-      >
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center bg-[var(--ink-wash-strong)] text-[var(--accent-main)] shrink-0 transition-transform group-hover:scale-105">
+      {/* If compressed & tall (vertical column companion) */}
+      {isCompressed && isTall ? (
+        <div
+          className="flex flex-col items-center justify-center text-center w-full h-full cursor-pointer gap-2 py-1 select-none"
+          onClick={onToggleExpand}
+          title="Click to expand"
+        >
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[var(--ink-wash-strong)] text-[var(--accent-main)] shadow-sm shrink-0 transition-transform group-hover:scale-105">
             <Clock className="w-4 h-4" />
           </div>
-
-          <div className="min-w-0">
-            <span className="block text-[10px] font-semibold tracking-wider uppercase text-[var(--text-faint)] truncate">
-              {isCompressed ? 'Rhythm' : 'Focus Rhythm'}
+          <div className="min-w-0 max-w-full px-1">
+            <span className="block text-[10px] font-semibold tracking-wider uppercase text-[var(--text-faint)]">
+              Rhythm
             </span>
-            {!isCompressed && (
-              <p className="text-xs font-semibold text-[var(--text-main)] truncate mt-0.5">
-                {breaksEnabled
-                  ? `${workMinutes}m focus · ${breakMinutes}m rest`
-                  : `${workMinutes}m continuous`}
-              </p>
-            )}
+            <p className="text-xs font-semibold text-[var(--text-main)] truncate mt-0.5 max-w-[110px]">
+              {breaksEnabled ? `${workMinutes}m / ${breakMinutes}m` : `${workMinutes}m flow`}
+            </p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-[var(--ink-wash)] text-[var(--accent-main)] border border-[var(--border-hairline)]">
+          <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-[var(--ink-wash)] text-[var(--accent-main)] border border-[var(--border-hairline)] shrink-0">
             {activePreset ? activePreset.name : `${workMinutes}m`}
           </span>
-
-          {isExpanded && onClose ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose();
-              }}
-              className="p-1 rounded-full text-[var(--text-faint)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash)] transition-colors"
-              title="Close widget"
-              aria-label="Close widget"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          ) : !isCompressed ? (
-            <ChevronDown className="w-3.5 h-3.5 text-[var(--text-faint)] apple-widget-chevron" />
-          ) : null}
         </div>
-      </div>
+      ) : (
+        /* Standard Header Bar (for resting, compressed-short, and expanded) */
+        <div
+          className={`flex items-center justify-between cursor-pointer w-full ${!isExpanded ? 'h-full' : ''}`}
+          onClick={onToggleExpand}
+          title={isExpanded ? 'Click to collapse' : 'Click to expand'}
+        >
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div
+              className={`${
+                isCompressed ? 'w-7 h-7 sm:w-8 sm:h-8' : 'w-8 h-8 sm:w-9 sm:h-9'
+              } rounded-xl flex items-center justify-center bg-[var(--ink-wash-strong)] text-[var(--accent-main)] shrink-0 transition-transform group-hover:scale-105`}
+            >
+              <Clock className={isCompressed ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
+            </div>
+
+            <div className="min-w-0">
+              <span className="block text-[10px] font-semibold tracking-wider uppercase text-[var(--text-faint)] truncate">
+                {isCompressed ? 'Rhythm' : 'Focus Rhythm'}
+              </span>
+              {!isCompressed ? (
+                <p className="text-xs font-semibold text-[var(--text-main)] truncate mt-0.5">
+                  {breaksEnabled
+                    ? `${workMinutes}m focus · ${breakMinutes}m rest`
+                    : `${workMinutes}m continuous`}
+                </p>
+              ) : !isNarrow ? (
+                <p className="text-[11px] font-medium text-[var(--text-main)] truncate">
+                  {breaksEnabled ? `${workMinutes}m / ${breakMinutes}m` : `${workMinutes}m`}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-[var(--ink-wash)] text-[var(--accent-main)] border border-[var(--border-hairline)]">
+              {activePreset ? activePreset.name : `${workMinutes}m`}
+            </span>
+
+            {isExpanded && onClose ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }}
+                className="p-1 rounded-full text-[var(--text-faint)] hover:text-[var(--text-main)] hover:bg-[var(--ink-wash)] transition-colors"
+                title="Close widget"
+                aria-label="Close widget"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            ) : !isCompressed ? (
+              <ChevronDown className="w-3.5 h-3.5 text-[var(--text-faint)] apple-widget-chevron" />
+            ) : null}
+          </div>
+        </div>
+      )}
 
       {/* Expandable Apple Controls Drawer */}
-      <div className="apple-widget-drawer">
+      <div className="apple-widget-drawer w-full">
         <div className="apple-widget-drawer-inner">
           <div className="pt-3.5 mt-3 border-t border-[var(--border-hairline)] space-y-3">
             {/* Quick Presets Grid */}
