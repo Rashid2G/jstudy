@@ -142,6 +142,52 @@ function savePersistedState(state: TimerState, goal: string, sessionStartedAt: s
   }
 }
 
+function createTimerWorker(): { worker: Worker; cleanup: () => void } | null {
+  if (typeof window === 'undefined' || typeof Worker === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined') {
+    return null;
+  }
+  try {
+    const code = `
+      var timer = null;
+      self.onmessage = function(e) {
+        if (e.data === 'start') {
+          if (!timer) {
+            timer = setInterval(function() {
+              self.postMessage('tick');
+            }, 1000);
+          }
+        } else if (e.data === 'stop') {
+          if (timer) {
+            clearInterval(timer);
+            timer = null;
+          }
+        }
+      };
+    `;
+    const blob = new Blob([code], { type: 'application/javascript' });
+    const url = URL.createObjectURL(blob);
+    const worker = new Worker(url);
+    return {
+      worker,
+      cleanup: () => {
+        try {
+          worker.postMessage('stop');
+          worker.terminate();
+        } catch {
+          // ignore
+        }
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function useStudyTimer({
   initialWorkMinutes = 25,
   initialBreakMinutes = 5,
@@ -165,6 +211,8 @@ export function useStudyTimer({
   const stateRef = useRef<TimerState>(timerState);
   stateRef.current = timerState;
 
+  const lastTickRef = useRef<number>(Date.now());
+
   const goalRef = useRef(sessionGoal);
   goalRef.current = sessionGoal;
 
@@ -177,38 +225,32 @@ export function useStudyTimer({
     savePersistedState(stateRef.current, newGoal, sessionStartRef.current);
   }, []);
 
-  // Save state on unload/beforeunload so page reload captures exact moment
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      savePersistedState({ ...stateRef.current, isRunning: false }, goalRef.current, sessionStartRef.current);
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('pagehide', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('pagehide', handleBeforeUnload);
-    };
-  }, []);
+  const handleTick = useCallback(() => {
+    const current = stateRef.current;
+    if (!current.isRunning) return;
 
-  // StrictMode-safe 1-second interval
-  useEffect(() => {
-    if (!timerState.isRunning) {
-      savePersistedState(timerState, goalRef.current, sessionStartRef.current);
-      return;
-    }
+    const now = Date.now();
+    const deltaMs = now - lastTickRef.current;
+    if (deltaMs < 1000) return;
 
-    const interval = window.setInterval(() => {
-      const current = stateRef.current;
-      if (!current.isRunning) return;
+    const elapsedSeconds = Math.min(Math.floor(deltaMs / 1000), 86400);
+    lastTickRef.current += elapsedSeconds * 1000;
 
-      const completedDuration = current.totalDurationSeconds;
-      const { nextState, didCompletePhase, completedWorkPhase } = tickTimer(current);
+    let updatedState = current;
+    let soundPlayed = false;
 
-      setTimerState(nextState);
-      savePersistedState(nextState, goalRef.current, sessionStartRef.current);
+    for (let i = 0; i < elapsedSeconds; i++) {
+      if (!updatedState.isRunning) break;
+
+      const completedDuration = updatedState.totalDurationSeconds;
+      const { nextState, didCompletePhase, completedWorkPhase } = tickTimer(updatedState);
+      updatedState = nextState;
 
       if (didCompletePhase) {
-        sound.playTimerEnd();
+        if (!soundPlayed) {
+          sound.playTimerEnd();
+          soundPlayed = true;
+        }
 
         if (completedWorkPhase) {
           const endIso = new Date().toISOString();
@@ -242,10 +284,65 @@ export function useStudyTimer({
           sessionStartRef.current = new Date().toISOString();
         }
       }
-    }, 1000);
+    }
 
-    return () => window.clearInterval(interval);
-  }, [timerState.isRunning]);
+    stateRef.current = updatedState;
+    setTimerState(updatedState);
+    savePersistedState(updatedState, goalRef.current, sessionStartRef.current);
+  }, []);
+
+  // Save state on unload/beforeunload so page reload captures exact moment
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      handleTick();
+      savePersistedState({ ...stateRef.current, isRunning: false }, goalRef.current, sessionStartRef.current);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+    };
+  }, [handleTick]);
+
+  // StrictMode-safe timer with unthrottled Web Worker, delta tracking & visibility listeners
+  useEffect(() => {
+    if (!timerState.isRunning) {
+      savePersistedState(timerState, goalRef.current, sessionStartRef.current);
+      return;
+    }
+
+    lastTickRef.current = Date.now();
+
+    const workerObj = createTimerWorker();
+    if (workerObj) {
+      workerObj.worker.onmessage = (e) => {
+        if (e.data === 'tick') {
+          handleTick();
+        }
+      };
+      workerObj.worker.postMessage('start');
+    }
+
+    // Interval fallback ensures execution across all browser environments
+    const interval = window.setInterval(handleTick, 1000);
+
+    const handleSync = () => {
+      handleTick();
+    };
+
+    window.addEventListener('visibilitychange', handleSync);
+    window.addEventListener('focus', handleSync);
+
+    return () => {
+      window.clearInterval(interval);
+      if (workerObj) {
+        workerObj.cleanup();
+      }
+      window.removeEventListener('visibilitychange', handleSync);
+      window.removeEventListener('focus', handleSync);
+    };
+  }, [timerState.isRunning, handleTick]);
 
   const toggleTimer = useCallback(() => {
     setTimerState((prev) => {
@@ -257,6 +354,7 @@ export function useStudyTimer({
         }
       }
       const updated = { ...prev, isRunning: nextRunning };
+      stateRef.current = updated;
       savePersistedState(updated, goalRef.current, sessionStartRef.current);
       return updated;
     });
@@ -276,6 +374,7 @@ export function useStudyTimer({
         remainingSeconds: dur,
         totalSessionRemainingSeconds: prev.totalSessionMinutes * 60,
       };
+      stateRef.current = updated;
       savePersistedState(updated, goalRef.current, null);
       return updated;
     });
@@ -294,6 +393,7 @@ export function useStudyTimer({
           remainingSeconds: dur,
           totalSessionRemainingSeconds: prev.totalSessionMinutes * 60,
         };
+        stateRef.current = updated;
         savePersistedState(updated, goalRef.current, null);
         return updated;
       }
@@ -309,6 +409,7 @@ export function useStudyTimer({
         totalDurationSeconds: dur,
         remainingSeconds: dur,
       };
+      stateRef.current = updated;
       savePersistedState(updated, goalRef.current, null);
       return updated;
     });
@@ -388,6 +489,7 @@ export function useStudyTimer({
           totalDurationSeconds: dur,
           remainingSeconds: dur,
         };
+        stateRef.current = updated;
         savePersistedState(updated, goalRef.current, null);
         return updated;
       });

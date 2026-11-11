@@ -119,6 +119,95 @@ describe('Timer State Persistence & Reload', () => {
     });
     expect(result.current.timerState.isRunning).toBe(true);
   });
+
+  it('accurately advances timer based on elapsed wall-clock time during background throttling', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() =>
+        useStudyTimer({
+          initialWorkMinutes: 25,
+          initialBreakMinutes: 5,
+        })
+      );
+
+      // Start the timer (25 min = 1500 sec)
+      act(() => {
+        result.current.toggleTimer();
+      });
+      expect(result.current.timerState.isRunning).toBe(true);
+      expect(result.current.timerState.remainingSeconds).toBe(1500);
+
+      // Simulate browser background throttling where 60 seconds of real time elapse
+      act(() => {
+        vi.advanceTimersByTime(60000);
+      });
+
+      // 60 seconds should have elapsed in total, leaving 1440 seconds
+      expect(result.current.timerState.remainingSeconds).toBe(1440);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('immediately syncs elapsed time when tab visibility changes or window receives focus', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() =>
+        useStudyTimer({
+          initialWorkMinutes: 25,
+          initialBreakMinutes: 5,
+        })
+      );
+
+      act(() => {
+        result.current.toggleTimer();
+      });
+      expect(result.current.timerState.remainingSeconds).toBe(1500);
+
+      // Advance clock by 120 seconds while simulating suspended intervals
+      vi.setSystemTime(Date.now() + 120000);
+
+      // User focuses window / tab becomes visible
+      act(() => {
+        window.dispatchEvent(new Event('visibilitychange'));
+      });
+
+      // Timer should have immediately caught up the 120 elapsed seconds
+      expect(result.current.timerState.remainingSeconds).toBe(1380);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('completes phase and saves session accurately when full duration elapses while backgrounded', async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() =>
+        useStudyTimer({
+          initialWorkMinutes: 25,
+          initialBreakMinutes: 5,
+          initialLoopEnabled: false,
+        })
+      );
+
+      act(() => {
+        result.current.toggleTimer();
+      });
+      expect(result.current.timerState.phase).toBe('work');
+      expect(result.current.timerState.remainingSeconds).toBe(1500);
+
+      // Advance clock by 25 minutes (1500 seconds)
+      act(() => {
+        vi.advanceTimersByTime(25 * 60 * 1000);
+      });
+
+      // Work phase should have completed, transitioning to break
+      expect(result.current.timerState.phase).toBe('break');
+      expect(result.current.timerState.completedCycles).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('Soundtrack Toggle & Sync with Timer', () => {
