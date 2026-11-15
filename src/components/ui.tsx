@@ -72,10 +72,10 @@ export const CalmSwitch: React.FC<CalmSwitchProps> = ({ checked, onCheckedChange
         }`}
       >
         <SwitchPrimitive.Thumb
-          className={`block w-4 h-4 rounded-full transition-transform duration-200 translate-x-[2px] will-change-transform ${
+          className={`block w-4 h-4 rounded-full transition-transform duration-200 will-change-transform ${
             checked
               ? 'translate-x-[18px] bg-[var(--accent-fg)]'
-              : 'bg-[var(--text-muted)]'
+              : 'translate-x-[2px] bg-[var(--text-muted)]'
           }`}
         />
       </SwitchPrimitive.Root>

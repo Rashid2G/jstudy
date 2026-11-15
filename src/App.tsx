@@ -330,7 +330,7 @@ export function App() {
 
       <footer className="focus-dimmable py-3 text-center shrink-0">
         <p className="text-[11px] text-[var(--text-faint)] max-w-md mx-auto mb-2 px-4 leading-relaxed font-light">
-          &ldquo;Everything has become fast, distracting, and overwhelming, and the only way to focus these days is to turn the noise down. Achive more, do less.&rdquo;
+          &ldquo;Everything has become fast, distracting, and overwhelming, and the only way to focus these days is to turn the noise down. Achieve more, do less.&rdquo;
         </p>
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[var(--ink-wash)] border border-[var(--border-hairline)] text-xs text-[var(--text-muted)] transition-colors shadow-sm">
           <span className="font-medium tracking-wide">Just Study</span>
