@@ -12,6 +12,21 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+    <script>
+      // Apply saved theme before first paint to avoid a bright flash in dark mode (FOUC).
+      (function () {
+        try {
+          var mode = localStorage.getItem('studinty-color-mode');
+          if (mode !== 'light' && (mode === 'dark' || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches))) {
+            document.documentElement.classList.add('dark');
+          }
+          var theme = localStorage.getItem('studinty-theme');
+          if (['sage', 'sand', 'slate', 'dusk', 'nordic'].indexOf(theme) !== -1) {
+            document.documentElement.setAttribute('data-theme', theme);
+          }
+        } catch (e) { /* localStorage unavailable */ }
+      })();
+    </script>
   </head>
   <body class="antialiased selection:bg-[var(--ink-wash-strong)] selection:text-[var(--text-main)]">
     <div id="root"></div>
