@@ -1,7 +1,7 @@
 {
   "name": "jstudy",
   "version": "1.0.0",
-  "description": "Everything has become fast, distracting, and overwhelming, and the only way to focus these days is to turn the noise down. Achive more, do less.",
+  "description": "Everything has become fast, distracting, and overwhelming, and the only way to focus these days is to turn the noise down. Achieve more, do less.",
   "homepage": "https://jstudy.rashidk.com",
   "main": "server/index.ts",
   "type": "module",

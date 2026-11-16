@@ -1,6 +1,6 @@
 # jstudy
 
-> "Everything has become fast, distracting, and overwhelming, and the only way to focus these days is to turn the noise down. Achive more, do less."
+> "Everything has become fast, distracting, and overwhelming, and the only way to focus these days is to turn the noise down. Achieve more, do less."
 
 A minimalist, calm study companion designed to keep you immersed in your studies rather than losing focus switching music or tweaking timers.
 
@@ -13,7 +13,7 @@ Runs as a **100% static client-side application** with browser-local persistence
 ## Key Features
 
 - **About & Philosophy**:
-  *"Everything has become fast, distracting, and overwhelming, and the only way to focus these days is to turn the noise down. Achive more, do less."*
+  *"Everything has become fast, distracting, and overwhelming, and the only way to focus these days is to turn the noise down. Achieve more, do less."*
 
 - **Static & Private Local Storage**:
   - All custom radios, study sessions, active streaks, and listening logs are stored directly and safely in your browser via `localStorage`.
