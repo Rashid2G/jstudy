@@ -1,6 +1,6 @@
 import React from 'react';
 import { AmbientSoundType } from '../types/index.js';
-import { CloudRain, Flame, Coffee, Waves, Wind, VolumeX } from 'lucide-react';
+import { CloudRain, Flame, Coffee, Waves, Wind, AirVent, VolumeX } from 'lucide-react';
 import { sound } from '../utils/sound.js';
 import { CalmSlider } from './ui.js';
 
@@ -22,6 +22,7 @@ const SOUND_OPTIONS: {
   { id: 'cafe', label: 'Cafe', icon: Coffee },
   { id: 'waves', label: 'Waves', icon: Waves },
   { id: 'whitenoise', label: 'Wind', icon: Wind },
+  { id: 'ac', label: 'General AC', icon: AirVent },
 ];
 
 export const AmbientMixer: React.FC<Props> = ({
@@ -55,7 +56,7 @@ export const AmbientMixer: React.FC<Props> = ({
             Ambient Background Atmosphere
           </span>
           <p className="text-[11px] text-[var(--text-muted)]">
-            Procedurally synthesized calming noise layering
+            Real field-recorded soundscapes — rain, hearth, cafe, surf, wind and AC
           </p>
         </div>
         {ambientSound !== 'none' && (
@@ -65,7 +66,7 @@ export const AmbientMixer: React.FC<Props> = ({
         )}
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2">
         {SOUND_OPTIONS.map((opt) => {
           const Icon = opt.icon;
           const isActive = ambientSound === opt.id;

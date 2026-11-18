@@ -1,6 +1,6 @@
 import React from 'react';
 import { AmbientSoundType } from '../../types/index.js';
-import { CloudRain, Flame, Coffee, Waves, Wind, VolumeX, Volume2, ChevronDown, X } from 'lucide-react';
+import { CloudRain, Flame, Coffee, Waves, Wind, AirVent, VolumeX, Volume2, ChevronDown, X } from 'lucide-react';
 import { sound } from '../../utils/sound.js';
 import { CalmSlider } from '../ui.js';
 
@@ -32,6 +32,7 @@ const SOUND_OPTIONS: {
   { id: 'cafe', label: 'Cafe', icon: Coffee },
   { id: 'waves', label: 'Waves', icon: Waves },
   { id: 'whitenoise', label: 'Wind', icon: Wind },
+  { id: 'ac', label: 'General AC', icon: AirVent },
 ];
 
 export const AmbientWidget: React.FC<Props> = ({
@@ -176,7 +177,7 @@ export const AmbientWidget: React.FC<Props> = ({
               <span className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-1.5">
                 Soundscape
               </span>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
                 {SOUND_OPTIONS.map((opt) => {
                   const Icon = opt.icon;
                   const isSelected = ambientSound === opt.id;

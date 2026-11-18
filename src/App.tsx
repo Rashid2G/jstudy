@@ -49,7 +49,7 @@ function getInitialRadioVolume(): number {
 function getInitialAmbientSound(): AmbientSoundType {
   if (typeof window === 'undefined') return 'none';
   const saved = window.localStorage.getItem('studinty-ambient-sound') as AmbientSoundType;
-  if (['none', 'rain', 'fireplace', 'cafe', 'waves', 'whitenoise'].includes(saved)) return saved;
+  if (['none', 'rain', 'fireplace', 'cafe', 'waves', 'whitenoise', 'ac'].includes(saved)) return saved;
   return 'none';
 }
 

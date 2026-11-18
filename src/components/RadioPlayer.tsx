@@ -92,7 +92,7 @@ export const RadioPlayer: React.FC<Props> = ({
     setStreamError(null);
     setIsLoading(true);
 
-    // 1. Built-in synthesized ambient station (e.g. ambient:rain)
+    // 1. Built-in ambient station (e.g. ambient:rain)
     if (station.stream_type === 'ambient' || station.url.startsWith('ambient:')) {
       youtubeAudio.pause();
       if (audioRef.current) audioRef.current.pause();
