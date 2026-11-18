@@ -33,7 +33,7 @@ Runs as a **100% static client-side application** with browser-local persistence
 - **YouTube Videos, Live Streams & Lofi Radios (Audio-Only)**:
   - Supports **YouTube videos**, **24/7 YouTube live streams**, **Icecast streams**, and **Web Audio soundscapes**.
   - YouTube streams play purely as distraction-free background audio in the browser via a hidden YouTube IFrame audio controller.
-  - Layer synthesized ambient sounds (*Rain*, *Hearth*, *Cafe*, *Waves*, *Wind*) alongside your music.
+  - Layer seamless field-recorded ambiences (*Rain*, *Hearth*, *Cafe*, *Waves*, *Wind*, *General AC*) alongside your music. All recordings are CC0/public domain — see `public/sounds/CREDITS.md`.
 
 - **Seamless Blended Canvas & Dark / Light Mode**:
   - Cohesive layout built with **Radix UI** primitives that blends directly into the page canvas without awkward card borders.

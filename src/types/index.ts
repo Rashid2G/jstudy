@@ -4,7 +4,7 @@ export type ColorMode = 'light' | 'dark';
 
 export type TimerMode = 'pomodoro' | 'custom' | 'continuous';
 
-export type AmbientSoundType = 'none' | 'rain' | 'fireplace' | 'cafe' | 'waves' | 'whitenoise';
+export type AmbientSoundType = 'none' | 'rain' | 'fireplace' | 'cafe' | 'waves' | 'whitenoise' | 'ac';
 
 export type StreamType = 'audio' | 'youtube' | 'ambient' | 'spotify';
 
