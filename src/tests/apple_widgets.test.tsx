@@ -297,5 +297,65 @@ describe('Apple Style Interactive Widgets Shelf', () => {
     // 30m - 5m = 25m
     expect(screen.getAllByText('25m').length).toBeGreaterThanOrEqual(1);
   });
+
+  it('pushes the page up via smooth scroll when a widget expands and does not fit in the viewport', async () => {
+    // Mock requestAnimationFrame to execute synchronously in test
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(performance.now() + 500);
+      return 1;
+    });
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    const mainEl = document.querySelector('main') as HTMLElement;
+    expect(mainEl).toBeDefined();
+
+    const shelfSection = screen.getByRole('region', { name: /Apple Control Widgets/i });
+    const ambientWidget = screen.getByRole('region', { name: /Ambient Atmosphere Widget/i });
+
+    // Simulate a constrained viewport where clientHeight is 500px and shelf is at top 300px
+    Object.defineProperty(mainEl, 'clientHeight', { value: 500, configurable: true });
+    vi.spyOn(mainEl, 'getBoundingClientRect').mockReturnValue({
+      top: 50,
+      bottom: 550,
+      left: 0,
+      right: 800,
+      width: 800,
+      height: 500,
+      x: 0,
+      y: 50,
+      toJSON: () => {},
+    });
+
+    vi.spyOn(shelfSection, 'getBoundingClientRect').mockReturnValue({
+      top: 350,
+      bottom: 514,
+      left: 100,
+      right: 700,
+      width: 600,
+      height: 164,
+      x: 100,
+      y: 350,
+      toJSON: () => {},
+    });
+
+    // Hover ambient widget to expand it
+    await act(async () => {
+      fireEvent.mouseEnter(ambientWidget);
+    });
+
+    // main.scrollTop should have scrolled up (> 0) to ensure the 336px expanded shelf is visible
+    expect(mainEl.scrollTop).toBeGreaterThan(0);
+
+    // Leaving the shelf returns scrollTop back to 0
+    await act(async () => {
+      fireEvent.mouseLeave(shelfSection);
+    });
+
+    expect(mainEl.scrollTop).toBe(0);
+    vi.unstubAllGlobals();
+  });
 });
 
