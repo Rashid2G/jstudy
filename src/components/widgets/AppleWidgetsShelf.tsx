@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { RadioStation, CalmTheme, ColorMode, AmbientSoundType } from '../../types/index.js';
 import { TimerState } from '../../utils/timer.js';
 import { TimerRhythmWidget } from './TimerRhythmWidget.js';
@@ -66,6 +66,7 @@ export const AppleWidgetsShelf: React.FC<Props> = ({
   onToggleColorMode,
 }) => {
   const [activeWidget, setActiveWidget] = useState<string | null>(null);
+  const shelfRef = useRef<HTMLElement | null>(null);
 
   const handleMouseEnter = (id: string) => {
     setActiveWidget(id);
@@ -81,6 +82,114 @@ export const AppleWidgetsShelf: React.FC<Props> = ({
 
   const isAnyExpanded = activeWidget !== null;
   const containerHeight = isAnyExpanded ? (activeWidget === 'rhythm' ? 388 : 336) : 164;
+
+  useEffect(() => {
+    const shelfEl = shelfRef.current;
+    if (!shelfEl) return;
+
+    const mainEl = shelfEl.closest('main') || document.querySelector('main');
+    if (!mainEl || mainEl.clientHeight <= 0) return;
+
+    let animId: number | null = null;
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const cancelAnim = () => {
+      if (animId !== null) {
+        cancelAnimationFrame(animId);
+        animId = null;
+      }
+    };
+    mainEl.addEventListener('wheel', cancelAnim, { passive: true });
+    mainEl.addEventListener('touchstart', cancelAnim, { passive: true });
+
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+
+    if (!activeWidget) {
+      // Widget collapsed — smoothly return page scroll back to origin if pushed up
+      const startScroll = mainEl.scrollTop;
+      if (startScroll > 0) {
+        if (prefersReducedMotion) {
+          mainEl.scrollTop = 0;
+        } else {
+          const startTime = performance.now();
+          const duration = 380;
+
+          const animateCollapse = (now: number) => {
+            const elapsed = now - startTime;
+            const t = Math.min(1, elapsed / duration);
+            const progress = easeOutCubic(t);
+            mainEl.scrollTop = startScroll * (1 - progress);
+
+            if (t < 1) {
+              animId = requestAnimationFrame(animateCollapse);
+            } else {
+              animId = null;
+            }
+          };
+          animId = requestAnimationFrame(animateCollapse);
+        }
+      }
+    } else {
+      // Widget expanded — check if target expanded shelf extends past visible main viewport
+      const targetHeight = activeWidget === 'rhythm' ? 388 : 336;
+      const shelfRect = shelfEl.getBoundingClientRect();
+      const mainRect = mainEl.getBoundingClientRect();
+
+      // Absolute distance from top of main's scrollable content to top of shelf
+      const shelfTopInMain = shelfRect.top - mainRect.top + mainEl.scrollTop;
+      const targetShelfBottom = shelfTopInMain + targetHeight + 16;
+      const targetScrollTop = Math.max(0, targetShelfBottom - mainEl.clientHeight);
+
+      const startScroll = mainEl.scrollTop;
+      const scrollDelta = targetScrollTop - startScroll;
+
+      if (Math.abs(scrollDelta) > 1) {
+        if (prefersReducedMotion) {
+          mainEl.scrollTop = targetScrollTop;
+        } else {
+          const startTime = performance.now();
+          const duration = 480; // matches 0.48s CSS transition
+
+          const animateExpand = (now: number) => {
+            const elapsed = now - startTime;
+            const t = Math.min(1, elapsed / duration);
+            const progress = easeOutCubic(t);
+            mainEl.scrollTop = startScroll + scrollDelta * progress;
+
+            if (t < 1) {
+              animId = requestAnimationFrame(animateExpand);
+            } else {
+              animId = null;
+            }
+          };
+          animId = requestAnimationFrame(animateExpand);
+        }
+      }
+    }
+
+    const handleResize = () => {
+      if (!activeWidget) return;
+      const targetHeight = activeWidget === 'rhythm' ? 388 : 336;
+      const shelfRect = shelfEl.getBoundingClientRect();
+      const mainRect = mainEl.getBoundingClientRect();
+      const shelfTopInMain = shelfRect.top - mainRect.top + mainEl.scrollTop;
+      const targetShelfBottom = shelfTopInMain + targetHeight + 16;
+      const targetScrollTop = Math.max(0, targetShelfBottom - mainEl.clientHeight);
+      mainEl.scrollTop = targetScrollTop;
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      if (animId !== null) {
+        cancelAnimationFrame(animId);
+      }
+      mainEl.removeEventListener('wheel', cancelAnim);
+      mainEl.removeEventListener('touchstart', cancelAnim);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [activeWidget]);
 
   // Inward expanding coordinates:
   // Top-Left (Rhythm) & Top-Right (Soundtrack) expand down into row 2
@@ -127,6 +236,7 @@ export const AppleWidgetsShelf: React.FC<Props> = ({
 
   return (
     <section
+      ref={shelfRef}
       role="region"
       aria-label="Apple Control Widgets"
       className="focus-dimmable w-full max-w-2xl mx-auto mt-8 sm:mt-10 md:mt-12 px-1 select-none"
